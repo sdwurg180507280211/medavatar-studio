@@ -112,7 +112,7 @@ const SceneView: React.FC<{scene: Scene; slideSrc?: string}> = ({scene, slideSrc
     {scene.type === 'doctor_ppt' ? <Slide scene={scene} slideSrc={slideSrc} /> : null}
     {scene.type === 'medical_animation' ? <MedicalAnimation scene={scene} /> : null}
     {scene.type === 'visual_full' ? <Slide scene={scene} slideSrc={slideSrc} /> : null}
-    {scene.type === 'doctor_full' ? <div style={{position:'absolute', left:810, right:120, top:220, fontSize:68, lineHeight:1.45, fontWeight:800, color:'#FFFFFF'}}>{scene.text}</div> : null}
+    {scene.type === 'doctor_full' ? <div style={{position:'absolute', left:810, right:120, top:220, fontSize:68, lineHeight:1.45, fontWeight:800, color:'#FFFFFF', textShadow:'0 6px 28px rgba(0,0,0,.55)', zIndex:30}}>{scene.text}</div> : null}
   </AbsoluteFill>
 );
 
@@ -128,6 +128,7 @@ export const MedAvatarVideo: React.FC<{project: MedAvatarProject; assets?: Rende
         return <Sequence key={scene.id} from={start} durationInFrames={duration} premountFor={project.video.fps}><SceneView scene={scene} slideSrc={slideSrc} /></Sequence>;
       })}
       <AvatarTrack project={project} avatarSrc={assets.avatar} />
+      <div style={{position:'absolute', left:0, right:0, bottom:0, height:190, background:'linear-gradient(180deg, rgba(4,14,22,0) 0%, rgba(4,14,22,.72) 78%)', zIndex:25}} />
       <SubtitleTrack project={project} />
       {assets.narration ? <Audio src={staticFile(assets.narration)} /> : null}
     </AbsoluteFill>
