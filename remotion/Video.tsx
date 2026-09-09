@@ -12,7 +12,7 @@ import {
   useVideoConfig,
 } from 'remotion';
 import type {CaptionCue} from '../src/core/captions';
-import type {MedAvatarProject, Scene} from '../src/core/schema';
+import type {MedAvatarProject, Scene, SubtitleStyle} from '../src/core/schema';
 import {MedicalAnimationScene} from './medicalAnimations';
 
 export type RenderAssets = {
@@ -28,6 +28,48 @@ const palette = {
   text: '#102A43',
   muted: '#5C7083',
   blue: '#2A74FF',
+};
+
+const subtitlePresets: Record<SubtitleStyle, {
+  fontSize: number;
+  background: string;
+  padding: string;
+  borderRadius: number;
+  textShadow: string;
+  active: string;
+  keyword: string;
+  pending: string;
+}> = {
+  medical: {
+    fontSize: 40,
+    background: 'rgba(4,14,22,.72)',
+    padding: '13px 26px 15px',
+    borderRadius: 20,
+    textShadow: '0 3px 14px rgba(0,0,0,.45)',
+    active: '#FFE082',
+    keyword: '#63E5E7',
+    pending: 'rgba(255,255,255,.62)',
+  },
+  minimal: {
+    fontSize: 36,
+    background: 'rgba(4,14,22,.20)',
+    padding: '8px 18px 10px',
+    borderRadius: 12,
+    textShadow: '0 3px 16px rgba(0,0,0,.72)',
+    active: '#FFFFFF',
+    keyword: '#8CE8EA',
+    pending: 'rgba(255,255,255,.72)',
+  },
+  social: {
+    fontSize: 48,
+    background: 'rgba(3,10,16,.84)',
+    padding: '16px 30px 18px',
+    borderRadius: 18,
+    textShadow: '0 3px 12px rgba(0,0,0,.55)',
+    active: '#FFD54F',
+    keyword: '#73F4DF',
+    pending: 'rgba(255,255,255,.58)',
+  },
 };
 
 const MockDoctor: React.FC = () => (
@@ -149,6 +191,7 @@ const SubtitleTrack: React.FC<{project: MedAvatarProject; captions: CaptionCue[]
   const {scene} = activeScene(project, frame);
   const mode = scene.subtitle?.mode ?? 'karaoke';
   if (mode === 'off') return null;
+  const visual = subtitlePresets[scene.subtitle?.style ?? 'medical'];
   const cue = captions.find((candidate) => candidate.sceneId === scene.id && time >= candidate.start - 0.02 && time < candidate.end + 0.06);
   const layout = scene.avatar?.layout ?? (scene.type === 'doctor_full' ? 'fullscreen' : 'bottom-right');
   const position = layout === 'bottom-right'
@@ -158,17 +201,17 @@ const SubtitleTrack: React.FC<{project: MedAvatarProject; captions: CaptionCue[]
       : {left:280, right:280};
   const characters = cue?.characters;
   return (
-    <div style={{position:'absolute', ...position, bottom:38, minHeight:68, boxSizing:'border-box', padding:'13px 26px 15px', borderRadius:20, background:'rgba(4,14,22,.72)', backdropFilter:'blur(8px)', textAlign:'center', fontSize:40, lineHeight:1.35, fontWeight:760, color:'#FFFFFF', textShadow:'0 3px 14px rgba(0,0,0,.45)', zIndex:45}}>
+    <div style={{position:'absolute', ...position, bottom:38, minHeight:68, boxSizing:'border-box', padding:visual.padding, borderRadius:visual.borderRadius, background:visual.background, backdropFilter:'blur(8px)', textAlign:'center', fontSize:visual.fontSize, lineHeight:1.35, fontWeight:760, color:'#FFFFFF', textShadow:visual.textShadow, zIndex:45}}>
       {characters ? characters.map((character, index) => {
         const active = mode === 'karaoke' && time >= character.start && time < character.end;
         const spoken = time >= character.end;
         const color = active
-          ? '#FFE082'
+          ? visual.active
           : character.keyword
-            ? '#63E5E7'
+            ? visual.keyword
             : spoken || mode === 'sentence'
               ? '#FFFFFF'
-              : 'rgba(255,255,255,.62)';
+              : visual.pending;
         return <span key={`${index}-${character.start}`} style={{display:/\s/.test(character.text) ? 'inline' : 'inline-block', color, transform:active ? 'scale(1.08)' : 'scale(1)', transition:'none'}}>{character.text}</span>;
       }) : scene.text}
     </div>
