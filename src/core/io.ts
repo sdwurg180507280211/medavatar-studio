@@ -1,10 +1,10 @@
 import {createHash} from 'node:crypto';
-import {mkdir, readFile, writeFile} from 'node:fs/promises';
+import {access, mkdir, readFile, writeFile} from 'node:fs/promises';
 import path from 'node:path';
 
 export const ensureDir = async (dir: string) => mkdir(dir, {recursive: true});
-
 export const readText = (file: string) => readFile(file, 'utf8');
+export const fileExists = async (file: string) => access(file).then(() => true).catch(() => false);
 
 export const writeJson = async (file: string, value: unknown) => {
   await ensureDir(path.dirname(file));
@@ -24,9 +24,13 @@ export const projectPaths = (projectName: string) => {
     config: path.join(root, 'project.json'),
     scene: path.join(output, 'scene.json'),
     timing: path.join(output, 'timing.json'),
-    narration: path.join(output, 'narration.wav'),
+    narrationWav: path.join(output, 'narration.wav'),
+    narrationMp3: path.join(output, 'narration.mp3'),
+    avatar: path.join(output, 'avatar.webm'),
+    slides: path.join(output, 'slides'),
     props: path.join(output, 'render-props.json'),
     finalVideo: path.join(output, 'final.mp4'),
     cache: path.join(output, '.cache.json'),
+    publicGenerated: path.resolve('public', 'generated', projectName),
   };
 };

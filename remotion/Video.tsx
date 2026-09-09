@@ -1,113 +1,90 @@
 import React from 'react';
 import {
   AbsoluteFill,
+  Audio,
+  Img,
+  OffthreadVideo,
   Sequence,
   interpolate,
   spring,
+  staticFile,
   useCurrentFrame,
   useVideoConfig,
 } from 'remotion';
 import type {MedAvatarProject, Scene} from '../src/core/schema';
+
+export type RenderAssets = {
+  narration?: string;
+  avatar?: string;
+  slides: string[];
+};
 
 const palette = {
   background: '#071826',
   panel: '#F8FBFD',
   text: '#102A43',
   muted: '#5C7083',
-  cyan: '#5DE2E7',
   blue: '#2A74FF',
 };
 
-const Doctor: React.FC<{layout: 'fullscreen' | 'bottom-right' | 'bottom-left' | 'hidden'}> = ({layout}) => {
+const MockDoctor: React.FC = () => (
+  <div style={{width:'62%', height:'72%', borderRadius:'48% 48% 24% 24% / 28% 28% 12% 12%', background:'linear-gradient(180deg,#EEF7FB 0%,#DCEBF4 45%,#FFFFFF 45%,#FFFFFF 100%)', border:'5px solid rgba(255,255,255,.86)', boxShadow:'0 24px 70px rgba(0,0,0,.24)', position:'relative'}}>
+    <div style={{position:'absolute', width:'42%', aspectRatio:'1', borderRadius:'50%', left:'29%', top:'-25%', background:'#E7C5AD', border:'8px solid #243746'}} />
+    <div style={{position:'absolute', left:'15%', right:'15%', top:'48%', height:6, background:'#B9D7EA'}} />
+    <div style={{position:'absolute', right:'11%', top:'56%', fontSize:24, fontWeight:700, color:palette.blue}}>MED</div>
+  </div>
+);
+
+const activeScene = (project: MedAvatarProject, frame: number) => {
+  let cursor = 0;
+  for (const scene of project.scenes) {
+    const duration = Math.max(1, Math.round(scene.durationInSeconds * project.video.fps));
+    if (frame < cursor + duration) return {scene, localFrame: frame - cursor};
+    cursor += duration;
+  }
+  return {scene: project.scenes.at(-1)!, localFrame: 0};
+};
+
+const AvatarTrack: React.FC<{project: MedAvatarProject; avatarSrc?: string}> = ({project, avatarSrc}) => {
   const frame = useCurrentFrame();
   const {fps} = useVideoConfig();
+  const {scene, localFrame} = activeScene(project, frame);
+  const layout = scene.avatar?.layout ?? (scene.type === 'doctor_full' ? 'fullscreen' : 'bottom-right');
   if (layout === 'hidden') return null;
-  const enter = spring({fps, frame, config: {damping: 18}});
   const pip = layout !== 'fullscreen';
-  const size = pip ? 330 : 620;
-  const right = layout === 'bottom-right' ? 70 : undefined;
-  const left = layout === 'bottom-left' ? 70 : pip ? undefined : 120;
+  const enter = spring({fps, frame: localFrame, config:{damping:18}});
+  const wrapper: React.CSSProperties = pip
+    ? {position:'absolute', width:520, height:620, bottom:58, right:layout === 'bottom-right' ? 45 : undefined, left:layout === 'bottom-left' ? 45 : undefined}
+    : {position:'absolute', inset:0};
   return (
-    <div style={{
-      position: 'absolute',
-      width: size,
-      height: pip ? 520 : 820,
-      right,
-      left,
-      bottom: pip ? 62 : 70,
-      transform: `scale(${interpolate(enter, [0, 1], [0.94, 1])})`,
-      transformOrigin: 'bottom center',
-      display: 'flex',
-      alignItems: 'flex-end',
-      justifyContent: 'center',
-    }}>
-      <div style={{
-        width: '82%',
-        height: '72%',
-        borderRadius: '48% 48% 24% 24% / 28% 28% 12% 12%',
-        background: 'linear-gradient(180deg,#EEF7FB 0%,#DCEBF4 45%,#FFFFFF 45%,#FFFFFF 100%)',
-        border: '5px solid rgba(255,255,255,.86)',
-        boxShadow: '0 24px 70px rgba(0,0,0,.24)',
-        position: 'relative',
-      }}>
-        <div style={{
-          position: 'absolute',
-          width: '42%',
-          aspectRatio: '1',
-          borderRadius: '50%',
-          left: '29%',
-          top: '-25%',
-          background: '#E7C5AD',
-          border: '8px solid #243746',
-        }} />
-        <div style={{position:'absolute', left:'15%', right:'15%', top:'48%', height:6, background:'#B9D7EA'}} />
-        <div style={{position:'absolute', right:'11%', top:'56%', fontSize:24, fontWeight:700, color:palette.blue}}>MED</div>
-      </div>
+    <div style={{...wrapper, transform:`scale(${interpolate(enter,[0,1],[0.96,1])})`, transformOrigin:'bottom center', display:'flex', alignItems:'flex-end', justifyContent:'center', zIndex:20}}>
+      {avatarSrc ? (
+        <OffthreadVideo src={staticFile(avatarSrc)} muted style={{width:'100%', height:'100%', objectFit:'contain'}} />
+      ) : <MockDoctor />}
     </div>
   );
 };
 
-const Subtitle: React.FC<{text: string}> = ({text}) => (
-  <div style={{
-    position: 'absolute',
-    left: 260,
-    right: 260,
-    bottom: 38,
-    textAlign: 'center',
-    fontSize: 42,
-    lineHeight: 1.35,
-    fontWeight: 700,
-    color: '#FFFFFF',
-    textShadow: '0 4px 18px rgba(0,0,0,.65)',
-  }}>{text}</div>
-);
+const SubtitleTrack: React.FC<{project: MedAvatarProject}> = ({project}) => {
+  const {scene} = activeScene(project, useCurrentFrame());
+  return <div style={{position:'absolute', left:250, right:250, bottom:34, textAlign:'center', fontSize:40, lineHeight:1.35, fontWeight:700, color:'#FFFFFF', textShadow:'0 4px 18px rgba(0,0,0,.7)', zIndex:40}}>{scene.text}</div>;
+};
 
-const Slide: React.FC<{scene: Scene}> = ({scene}) => {
+const Slide: React.FC<{scene: Scene; slideSrc?: string}> = ({scene, slideSrc}) => {
   const frame = useCurrentFrame();
   const {fps} = useVideoConfig();
-  const progress = spring({fps, frame, config: {damping: 18}});
+  const progress = spring({fps, frame, config:{damping:18}});
   return (
-    <div style={{
-      position: 'absolute',
-      left: 80,
-      top: 70,
-      bottom: 120,
-      width: 1360,
-      borderRadius: 32,
-      background: palette.panel,
-      boxShadow: '0 30px 90px rgba(0,0,0,.26)',
-      padding: '70px 80px',
-      boxSizing: 'border-box',
-      transform: `translateY(${interpolate(progress,[0,1],[50,0])}px)`,
-      opacity: progress,
-      color: palette.text,
-    }}>
-      <div style={{fontSize:26, fontWeight:700, color:palette.blue, letterSpacing:3}}>SLIDE {scene.slide ?? 1}</div>
-      <div style={{fontSize:64, fontWeight:800, marginTop:34, maxWidth:1100}}>医学科普要点</div>
-      <div style={{fontSize:42, lineHeight:1.55, marginTop:50, color:palette.muted}}>{scene.text}</div>
-      <div style={{position:'absolute', left:80, right:80, bottom:70, height:10, borderRadius:99, background:'#D9E8F2'}}>
-        <div style={{height:'100%', width:'58%', borderRadius:99, background:palette.blue}} />
-      </div>
+    <div style={{position:'absolute', left:70, top:60, bottom:120, width:1370, borderRadius:30, background:palette.panel, boxShadow:'0 30px 90px rgba(0,0,0,.26)', overflow:'hidden', transform:`translateY(${interpolate(progress,[0,1],[45,0])}px)`, opacity:progress, color:palette.text}}>
+      {slideSrc ? (
+        <Img src={staticFile(slideSrc)} style={{width:'100%', height:'100%', objectFit:'contain', background:'#fff'}} />
+      ) : (
+        <div style={{padding:'70px 80px'}}>
+          <div style={{fontSize:26, fontWeight:700, color:palette.blue, letterSpacing:3}}>SLIDE {scene.slide ?? 1}</div>
+          <div style={{fontSize:64, fontWeight:800, marginTop:34}}>医学科普要点</div>
+          <div style={{fontSize:42, lineHeight:1.55, marginTop:50, color:palette.muted}}>{scene.text}</div>
+        </div>
+      )}
     </div>
   );
 };
@@ -122,7 +99,7 @@ const MedicalAnimation: React.FC<{scene: Scene}> = ({scene}) => {
       <div style={{position:'absolute', left:80, top:62, fontSize:34, fontWeight:800, color:palette.text}}>医学机制动画 · {scene.animation?.name ?? 'mechanism'}</div>
       <div style={{position:'absolute', left:180, right:180, top:300, height:190, borderRadius:120, background:'#E56D72', transform:`scaleY(${pulse})`, transformOrigin:'center'}}>
         <div style={{position:'absolute', inset:38, borderRadius:90, background:'#8ED4EE', overflow:'hidden'}}>
-          {Array.from({length:6}).map((_,i)=><div key={i} style={{position:'absolute', width:46, height:46, borderRadius:'50%', background:'#F9FAFB', top:34 + (i%2)*42, left:((i*150+flow)%900)-100}} />)}
+          {Array.from({length:6}).map((_,i)=><div key={i} style={{position:'absolute', width:46, height:46, borderRadius:'50%', background:'#F9FAFB', top:34+(i%2)*42, left:((i*150+flow)%900)-100}} />)}
         </div>
       </div>
       <div style={{position:'absolute', left:230, top:570, fontSize:36, fontWeight:700, color:palette.text}}>血流 → 血管压力 → 血管壁变化</div>
@@ -130,23 +107,16 @@ const MedicalAnimation: React.FC<{scene: Scene}> = ({scene}) => {
   );
 };
 
-const SceneView: React.FC<{scene: Scene}> = ({scene}) => {
-  const layout = scene.avatar?.layout ?? (scene.type === 'doctor_full' ? 'fullscreen' : 'bottom-right');
-  return (
-    <AbsoluteFill style={{background: `radial-gradient(circle at 20% 10%, #123B59 0%, ${palette.background} 55%)`}}>
-      {scene.type === 'doctor_ppt' ? <Slide scene={scene} /> : null}
-      {scene.type === 'medical_animation' ? <MedicalAnimation scene={scene} /> : null}
-      {scene.type === 'visual_full' ? <Slide scene={scene} /> : null}
-      <Doctor layout={layout} />
-      {scene.type === 'doctor_full' ? (
-        <div style={{position:'absolute', left:810, right:120, top:220, fontSize:68, lineHeight:1.45, fontWeight:800, color:'#FFFFFF'}}>{scene.text}</div>
-      ) : null}
-      <Subtitle text={scene.text} />
-    </AbsoluteFill>
-  );
-};
+const SceneView: React.FC<{scene: Scene; slideSrc?: string}> = ({scene, slideSrc}) => (
+  <AbsoluteFill style={{background:`radial-gradient(circle at 20% 10%, #123B59 0%, ${palette.background} 55%)`}}>
+    {scene.type === 'doctor_ppt' ? <Slide scene={scene} slideSrc={slideSrc} /> : null}
+    {scene.type === 'medical_animation' ? <MedicalAnimation scene={scene} /> : null}
+    {scene.type === 'visual_full' ? <Slide scene={scene} slideSrc={slideSrc} /> : null}
+    {scene.type === 'doctor_full' ? <div style={{position:'absolute', left:810, right:120, top:220, fontSize:68, lineHeight:1.45, fontWeight:800, color:'#FFFFFF'}}>{scene.text}</div> : null}
+  </AbsoluteFill>
+);
 
-export const MedAvatarVideo: React.FC<{project: MedAvatarProject}> = ({project}) => {
+export const MedAvatarVideo: React.FC<{project: MedAvatarProject; assets?: RenderAssets}> = ({project, assets = {slides:[]}}) => {
   let from = 0;
   return (
     <AbsoluteFill>
@@ -154,12 +124,12 @@ export const MedAvatarVideo: React.FC<{project: MedAvatarProject}> = ({project})
         const duration = Math.max(1, Math.round(scene.durationInSeconds * project.video.fps));
         const start = from;
         from += duration;
-        return (
-          <Sequence key={scene.id} from={start} durationInFrames={duration} premountFor={project.video.fps}>
-            <SceneView scene={scene} />
-          </Sequence>
-        );
+        const slideSrc = scene.slide ? assets.slides[scene.slide - 1] : undefined;
+        return <Sequence key={scene.id} from={start} durationInFrames={duration} premountFor={project.video.fps}><SceneView scene={scene} slideSrc={slideSrc} /></Sequence>;
       })}
+      <AvatarTrack project={project} avatarSrc={assets.avatar} />
+      <SubtitleTrack project={project} />
+      {assets.narration ? <Audio src={staticFile(assets.narration)} /> : null}
     </AbsoluteFill>
   );
 };

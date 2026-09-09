@@ -2,43 +2,41 @@
 
 AI-powered medical explainer video pipeline for **digital doctors + PPT/slides + medical animations + narration + Remotion**.
 
-> MVP philosophy: audio is the master clock, avatar providers are actors, and Remotion is the director.
+> Audio is the master clock, avatar providers are actors, and Remotion is the director.
 
-## MVP pipeline
+## Pipeline
 
 ```text
 script.md
    ↓
 scene.json
    ↓
-TTS / timing
+ElevenLabs / Mock TTS + timing
    ↓
-Digital avatar
+HeyGen Digital Twin / Mock presenter
    ↓
-PPT + medical animation
+PPTX → PDF → PNG + medical animation
    ↓
 Remotion
    ↓
 final.mp4
 ```
 
-The first committed MVP deliberately uses mock providers so the complete timeline and renderer can be developed without spending ElevenLabs/HeyGen credits.
-
-## What works now
+## Implemented
 
 - `script.md -> scene.json`
-- Zod scene schema
-- Four scene types: `doctor_full`, `doctor_ppt`, `medical_animation`, `visual_full`
-- Mock TTS generates a valid silent WAV plus timing data
-- Mock doctor presenter with fullscreen / bottom-right / bottom-left / hidden layouts
-- Remotion scene sequencing
-- PPT-style slide placeholder
-- Deterministic medical mechanism animation placeholder
-- 1920×1080 / 25 fps render
-- Provider boundaries for ElevenLabs and HeyGen
-- Demo project
+- scene-level timing driven by ElevenLabs character alignment
+- real ElevenLabs timestamped TTS adapter
+- real HeyGen v3 asset upload → avatar render → polling → transparent WebM download
+- provider selection from `project.json` with `.env` override
+- cache keys for voice, avatar and PPT stages to avoid repeated paid generations
+- PPTX → PDF → PNG conversion through LibreOffice + `pdftoppm`
+- Remotion playback of narration, transparent avatar WebM and actual slide PNGs
+- presenter layouts: fullscreen / bottom-right / bottom-left / hidden
+- medical animation component placeholder
+- 1920×1080 / 25 fps demo project
 
-## Quick start
+## Quick start: free mock mode
 
 Requirements: Node.js 20+ and pnpm.
 
@@ -48,71 +46,101 @@ cp .env.example .env
 pnpm demo
 ```
 
-> **First render hangs at "Bundling" or downloads nothing?** On first render Remotion downloads Chrome Headless Shell from Google's servers, which can stall in regions where that is blocked. Either set a proxy (`https_proxy`/`http_proxy`) or point Remotion at a local Chrome by uncommenting `REMOTION_CHROME_EXECUTABLE` in `.env`. Once cached, later renders skip the download entirely.
+Mock mode does not call ElevenLabs or HeyGen. If `projects/demo/slides.pptx` is absent, the renderer uses slide placeholders.
 
-Expected output:
+## Real ElevenLabs + HeyGen
+
+Edit `projects/demo/project.json`:
+
+```json
+{
+  "voice": {"provider": "elevenlabs"},
+  "avatar": {"provider": "heygen"}
+}
+```
+
+Then fill `.env`:
+
+```bash
+ELEVENLABS_API_KEY=...
+ELEVENLABS_VOICE_ID=...
+HEYGEN_API_KEY=...
+HEYGEN_AVATAR_ID=...
+```
+
+Run:
+
+```bash
+pnpm medavatar build demo
+```
+
+HeyGen uses `POST /v3/assets` to upload the narration directly, then `POST /v3/videos` with `audio_asset_id` and `output_format=webm`. No public audio hosting is required. The selected HeyGen avatar must support matting for transparent WebM output.
+
+## PPT support
+
+Place a deck at:
+
+```text
+projects/demo/slides.pptx
+```
+
+Install LibreOffice and Poppler (`pdftoppm`) locally, or set:
+
+```bash
+LIBREOFFICE_BIN=/path/to/soffice
+PDFTOPPM_BIN=/path/to/pdftoppm
+```
+
+Run only the slide stage:
+
+```bash
+pnpm medavatar slides demo
+```
+
+Generated slide PNGs live under `projects/demo/output/slides/` and are copied to `public/generated/` only for Remotion rendering.
+
+## CLI
+
+```bash
+pnpm medavatar storyboard demo
+pnpm medavatar voice demo
+pnpm medavatar avatar demo
+pnpm medavatar slides demo
+pnpm medavatar render demo
+pnpm medavatar build demo
+```
+
+Expected real-mode output:
 
 ```text
 projects/demo/output/
 ├── scene.json
 ├── timing.json
-├── narration.wav
+├── narration.mp3
+├── avatar.webm
+├── slides/
+│   ├── 001.png
+│   └── 002.png
 ├── render-props.json
+├── .cache.json
 └── final.mp4
 ```
 
-Open Remotion Studio:
+## Important MVP constraints
 
-```bash
-pnpm studio
-```
+- one continuous HeyGen avatar video is generated for the narration, then Remotion changes its layout across scenes; this avoids avatar gesture resets at every sentence
+- PPT native animations are not reproduced; static slide pages are animated/composited by Remotion
+- medical mechanism animations are deterministic React/SVG components, not generative clinical imagery
+- HeyGen direct asset upload currently has a 32 MB limit in this implementation; long videos should later be split by chapter or use HeyGen's large-file upload flow
 
-Run individual stages:
+## Next
 
-```bash
-pnpm medavatar storyboard demo
-pnpm medavatar voice demo
-pnpm medavatar render demo
-```
+1. chapter-aware avatar generation for long videos
+2. richer subtitle segmentation and keyword highlighting
+3. reusable reviewed medical animation library
+4. PPT page/scene editor
+5. Web UI after the CLI pipeline is stable
 
-## Scene contract
+## Medical publishing guardrails
 
-```json
-{
-  "id": "scene-002",
-  "type": "doctor_ppt",
-  "text": "持续升高的血压，会让血管壁承受更大的压力。",
-  "durationInSeconds": 8,
-  "slide": 1,
-  "avatar": {
-    "layout": "bottom-right",
-    "scale": 0.28
-  }
-}
-```
-
-The renderer consumes scene JSON rather than coupling itself to HeyGen or ElevenLabs. This lets providers be replaced later without rewriting the video engine.
-
-## Provider roadmap
-
-### ElevenLabs
-
-`src/providers/elevenlabs.ts` contains the real TTS adapter boundary using the timestamped speech endpoint. The CLI remains on the mock provider until provider selection and cache semantics are finalized.
-
-### HeyGen
-
-`src/providers/heygen.ts` contains the API boundary for audio-driven avatar generation. Production use still needs one deployment-specific decision: how the narration file becomes reachable by HeyGen (asset upload or public object-storage URL). The mock renderer intentionally avoids making paid API calls.
-
-## Next milestones
-
-1. Wire provider selection from `.env` / project config.
-2. Convert ElevenLabs character timestamps into sentence/word timing.
-3. Add HeyGen asset upload, job polling, WebM download and cache.
-4. Add PPTX -> PDF -> PNG conversion.
-5. Replace mock presenter with transparent HeyGen WebM.
-6. Add reusable medical animation components.
-7. Add a small Web editor only after the CLI pipeline is stable.
-
-## Safety / medical content
-
-MedAvatar Studio is a production tool, not a medical decision system. Human review should remain in the publishing workflow for clinical claims, medication information, references, patient privacy and AI-avatar disclosure.
+Human review should remain in the publishing workflow for clinical claims, medication information, references, patient privacy, doctor/avatar authorization and AI-generated-avatar disclosure.

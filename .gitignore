@@ -4,4 +4,5 @@ node_modules/
 .cache/
 projects/*/output/
 projects/*/private/
+public/generated/
 *.log

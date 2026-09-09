@@ -1,5 +1,5 @@
 import {writeFile} from 'node:fs/promises';
-import type {AvatarProvider, NarrationResult, TtsProvider} from './types.js';
+import type {AvatarProvider, CharacterAlignment, NarrationResult, TtsProvider} from './types.js';
 
 const writeSilentWav = async (file: string, durationSeconds: number) => {
   const sampleRate = 16000;
@@ -26,16 +26,28 @@ const writeSilentWav = async (file: string, durationSeconds: number) => {
 
 export class MockTtsProvider implements TtsProvider {
   async synthesize({text, outputPath}: {text: string; outputPath: string}): Promise<NarrationResult> {
-    const parts = text.split(/(?<=[。！？!?])\s*/).map((x) => x.trim()).filter(Boolean);
-    const segments = [];
+    const characters = [...text];
+    const starts: number[] = [];
+    const ends: number[] = [];
     let cursor = 0;
-    for (const part of parts) {
-      const duration = Math.max(1.2, (part.match(/[\u3400-\u9fff]/g)?.length ?? part.length) / 4.2);
-      segments.push({text: part, start: cursor, end: cursor + duration});
+    for (const char of characters) {
+      const duration = /[\u3400-\u9fff]/.test(char) ? 1 / 4.2 : /\s/.test(char) ? 0.04 : 0.08;
+      starts.push(cursor);
       cursor += duration;
+      ends.push(cursor);
     }
+    const alignment: CharacterAlignment = {
+      characters,
+      character_start_times_seconds: starts,
+      character_end_times_seconds: ends,
+    };
     await writeSilentWav(outputPath, Math.max(1, cursor));
-    return {audioPath: outputPath, durationInSeconds: cursor, segments};
+    return {
+      audioPath: outputPath,
+      durationInSeconds: cursor,
+      segments: [{text, start: 0, end: cursor}],
+      alignment,
+    };
   }
 }
 

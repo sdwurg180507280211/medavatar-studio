@@ -4,10 +4,17 @@ export type TimingSegment = {
   end: number;
 };
 
+export type CharacterAlignment = {
+  characters: string[];
+  character_start_times_seconds: number[];
+  character_end_times_seconds: number[];
+};
+
 export type NarrationResult = {
   audioPath: string;
   durationInSeconds: number;
   segments: TimingSegment[];
+  alignment?: CharacterAlignment;
 };
 
 export interface TtsProvider {
@@ -21,5 +28,6 @@ export interface AvatarProvider {
   render(input: {
     audioPath: string;
     outputPath: string;
-  }): Promise<{videoPath: string}>;
+    title?: string;
+  }): Promise<{videoPath: string; videoId?: string; assetId?: string}>;
 }
