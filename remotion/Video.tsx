@@ -48,7 +48,29 @@ const activeScene = (project: MedAvatarProject, frame: number) => {
   return {scene: project.scenes.at(-1)!, localFrame: 0};
 };
 
-const AvatarClip: React.FC<{project: MedAvatarProject; avatarSrc?: string; globalStartFrame?: number}> = ({project, avatarSrc, globalStartFrame = 0}) => {
+const sceneMasksAvatarReset = (scene: Scene | undefined) => {
+  if (!scene) return false;
+  if (scene.avatar?.layout === 'hidden') return true;
+  return scene.type === 'visual_full'
+    || scene.type === 'doctor_ppt'
+    || scene.type === 'medical_animation'
+    || scene.avatar?.layout === 'bottom-left'
+    || scene.avatar?.layout === 'bottom-right';
+};
+
+const shouldMaskBoundary = (project: MedAvatarProject, boundaryFrame: number) => {
+  if (boundaryFrame <= 0) return false;
+  const previous = activeScene(project, Math.max(0, boundaryFrame - 1)).scene;
+  const next = activeScene(project, boundaryFrame).scene;
+  return sceneMasksAvatarReset(previous) || sceneMasksAvatarReset(next);
+};
+
+const AvatarClip: React.FC<{
+  project: MedAvatarProject;
+  avatarSrc?: string;
+  globalStartFrame?: number;
+  opacity?: number;
+}> = ({project, avatarSrc, globalStartFrame = 0, opacity = 1}) => {
   const clipFrame = useCurrentFrame();
   const {fps} = useVideoConfig();
   const globalFrame = clipFrame + globalStartFrame;
@@ -61,12 +83,33 @@ const AvatarClip: React.FC<{project: MedAvatarProject; avatarSrc?: string; globa
     ? {position:'absolute', width:520, height:620, bottom:58, right:layout === 'bottom-right' ? 45 : undefined, left:layout === 'bottom-left' ? 45 : undefined, borderRadius:26, overflow:'hidden', boxShadow:'0 24px 60px rgba(0,0,0,.4)'}
     : {position:'absolute', inset:0};
   return (
-    <div style={{...wrapper, transform:`scale(${interpolate(enter,[0,1],[0.96,1])})`, transformOrigin:'bottom center', display:'flex', alignItems:'flex-end', justifyContent:'center', zIndex:20}}>
+    <div style={{...wrapper, opacity, transform:`scale(${interpolate(enter,[0,1],[0.96,1])})`, transformOrigin:'bottom center', display:'flex', alignItems:'flex-end', justifyContent:'center', zIndex:20}}>
       {avatarSrc ? (
         <OffthreadVideo src={staticFile(avatarSrc)} muted style={{width:'100%', height:'100%', objectFit:pip ? 'cover' : 'contain'}} />
       ) : <MockDoctor />}
     </div>
   );
+};
+
+const ChapterAvatarClip: React.FC<{
+  project: MedAvatarProject;
+  avatarSrc: string;
+  globalStartFrame: number;
+  durationInFrames: number;
+  fadeIn: boolean;
+  fadeOut: boolean;
+}> = ({project, avatarSrc, globalStartFrame, durationInFrames, fadeIn, fadeOut}) => {
+  const frame = useCurrentFrame();
+  const {fps} = useVideoConfig();
+  const fadeFrames = Math.max(2, Math.min(Math.round(fps * 0.2), Math.floor(durationInFrames / 3)));
+  let opacity = 1;
+  if (fadeIn) {
+    opacity *= interpolate(frame, [0, fadeFrames], [0, 1], {extrapolateLeft:'clamp', extrapolateRight:'clamp'});
+  }
+  if (fadeOut) {
+    opacity *= interpolate(frame, [Math.max(0, durationInFrames - fadeFrames - 1), Math.max(1, durationInFrames - 1)], [1, 0], {extrapolateLeft:'clamp', extrapolateRight:'clamp'});
+  }
+  return <AvatarClip project={project} avatarSrc={avatarSrc} globalStartFrame={globalStartFrame} opacity={opacity} />;
 };
 
 const AvatarTrack: React.FC<{project: MedAvatarProject; assets: RenderAssets}> = ({project, assets}) => {
@@ -76,9 +119,20 @@ const AvatarTrack: React.FC<{project: MedAvatarProject; assets: RenderAssets}> =
         {assets.avatarChapters.map((chapter, index) => {
           const from = Math.round(chapter.start * project.video.fps);
           const duration = Math.max(1, Math.round((chapter.end - chapter.start) * project.video.fps));
+          const hasPrevious = index > 0;
+          const hasNext = index < assets.avatarChapters!.length - 1;
+          const fadeIn = hasPrevious && shouldMaskBoundary(project, from);
+          const fadeOut = hasNext && shouldMaskBoundary(project, from + duration);
           return (
             <Sequence key={`${chapter.src}-${index}`} from={from} durationInFrames={duration} premountFor={project.video.fps}>
-              <AvatarClip project={project} avatarSrc={chapter.src} globalStartFrame={from} />
+              <ChapterAvatarClip
+                project={project}
+                avatarSrc={chapter.src}
+                globalStartFrame={from}
+                durationInFrames={duration}
+                fadeIn={fadeIn}
+                fadeOut={fadeOut}
+              />
             </Sequence>
           );
         })}
