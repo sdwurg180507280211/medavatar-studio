@@ -11,11 +11,17 @@ script.md
    ↓
 scene.json
    ↓
-ElevenLabs / Mock TTS + timing
+ElevenLabs / Mock TTS
+   ├── narration.mp3 / narration.wav
+   ├── alignment.json
+   ├── timing.json
+   └── captions.json
    ↓
 HeyGen Digital Twin / Mock presenter
+   ├── single avatar.webm
+   └── optional chaptered avatar WebMs
    ↓
-PPTX → PDF → PNG + medical animation
+PPTX → PDF → PNG + deterministic medical animations
    ↓
 Remotion
    ↓
@@ -24,45 +30,52 @@ final.mp4
 
 ## Implemented
 
-- `script.md -> scene.json`
-- Markdown scene directives for explicit scene type, slide page, avatar position and medical animation
-- Markdown headings are treated as structure and are not spoken
-- scene-level timing driven by ElevenLabs character alignment
-- real ElevenLabs timestamped TTS adapter
-- real HeyGen v3 asset upload → avatar render → polling → transparent WebM download
-- provider selection from `project.json` with optional `.env` override
-- cache keys for voice, avatar and PPT stages to avoid repeated paid generations
-- stale-output cleanup when switching providers or removing a PPT
-- PPTX → PDF → PNG conversion through LibreOffice + `pdftoppm`
-- Remotion playback of narration, transparent avatar WebM and actual slide PNGs
+- `script.md -> scene.json` storyboard pipeline
+- Markdown directives for scene type, PPT page, avatar position, subtitles, keywords and medical animations
+- real ElevenLabs timestamped TTS
+- character alignment → scene timing → short timed captions
+- karaoke-style active-character highlighting and keyword emphasis
+- scene boundaries preserve ElevenLabs paragraph pauses and initial lead-in
+- real HeyGen v3 asset upload → Digital Twin render → polling → transparent WebM download
+- safe default `single` avatar strategy
+- optional `chaptered` HeyGen strategy for longer videos
+- chapter planning prefers visual/PPT/animation boundaries to hide avatar resets
+- per-stage and per-chapter cache keys to reduce repeated paid generation
+- resumable chapter generation and protection against rendering a partial chapter manifest
+- PPTX → PDF → PNG through LibreOffice + Poppler
 - presenter layouts: fullscreen / bottom-right / bottom-left / hidden
-- medical animation component placeholder
-- 1920×1080 / 25 fps demo project
-- CI typecheck plus a free Mock storyboard/voice smoke test
+- reusable deterministic medical animation components
+- 1920×1080 / 25fps demo
+- CI typecheck + free Mock voice/timing/caption/chapter-plan smoke test
 
-## Quick start: free mock mode
+## Quick start
 
 Requirements: Node.js 20+ and pnpm.
 
 ```bash
 pnpm install
 cp .env.example .env
-pnpm demo
 ```
 
-Mock mode does not call ElevenLabs or HeyGen. If `projects/demo/slides.pptx` is absent, the renderer uses slide placeholders.
+For a free pipeline check:
+
+```bash
+TTS_PROVIDER=mock AVATAR_PROVIDER=mock pnpm demo
+```
+
+The demo repository includes `projects/demo/slides.pptx`, so the PPT conversion/render path can also be exercised locally when LibreOffice and Poppler are installed.
 
 ## Script scene directives
 
-The first Markdown heading is useful as document structure but is not narrated. Add an HTML comment before a narration paragraph when you want explicit visual control:
+Markdown headings are structural and are not narrated. Put a `medavatar` comment before a narration paragraph when explicit visual control is needed:
 
 ```md
 # 高血压为什么会伤害血管
 
-<!-- medavatar:type=doctor_full avatar=fullscreen -->
+<!-- medavatar:type=doctor_full avatar=fullscreen subtitle=karaoke -->
 很多高血压患者并没有明显的不舒服。
 
-<!-- medavatar:type=doctor_ppt slide=1 avatar=bottom-right scale=0.28 -->
+<!-- medavatar:type=doctor_ppt slide=1 avatar=bottom-right scale=0.28 keywords=血压,血管 -->
 持续升高的血压，会让血管壁长期承受更大的机械压力。
 
 <!-- medavatar:type=medical_animation avatar=bottom-right animation=artery-pressure keywords=血管内皮,血压,压力 -->
@@ -77,24 +90,35 @@ Supported directive fields:
 | `slide` | `slide=2` |
 | `avatar` | `fullscreen`, `bottom-right`, `bottom-left`, `hidden` |
 | `scale` | `scale=0.28` |
-| `animation` | `animation=artery-pressure` |
+| `subtitle` | `karaoke`, `sentence`, `off` |
+| `animation` | `artery-pressure`, `plaque-growth`, `heart-beat`, `risk-pathway` |
 | `keywords` | `keywords=血管内皮,血压,压力` |
-| `duration` | optional estimate override such as `duration=8` |
+| `duration` | optional estimate override, e.g. `duration=8` |
 
-When no directive is supplied, the MVP still generates a reasonable default scene sequence. Real TTS timing later replaces the estimated scene duration.
+`keywords` are reused by subtitle highlighting and, where applicable, the medical-animation scene.
+
+## Timed captions
+
+After the voice stage, MedAvatar writes:
+
+```text
+projects/demo/output/
+├── timing.json
+├── alignment.json
+└── captions.json
+```
+
+ElevenLabs character timestamps drive caption timing directly. The renderer splits long narration into short caption cues and can emphasize the currently spoken character plus configured medical keywords.
+
+Run only this part:
+
+```bash
+pnpm medavatar voice demo
+```
 
 ## Real ElevenLabs + HeyGen
 
-Edit `projects/demo/project.json`:
-
-```json
-{
-  "voice": {"provider": "elevenlabs"},
-  "avatar": {"provider": "heygen"}
-}
-```
-
-Then fill `.env`:
+Keep API keys only in `.env`:
 
 ```bash
 ELEVENLABS_API_KEY=...
@@ -103,13 +127,87 @@ HEYGEN_API_KEY=...
 HEYGEN_AVATAR_ID=...
 ```
 
-Run:
+Use real providers through `project.json` or environment overrides:
 
 ```bash
-pnpm medavatar build demo
+TTS_PROVIDER=elevenlabs AVATAR_PROVIDER=heygen pnpm medavatar build demo
 ```
 
-HeyGen uses `POST /v3/assets` to upload the narration directly, then `POST /v3/videos` with `audio_asset_id` and `output_format=webm`. No public audio hosting is required. The selected HeyGen avatar must support matting for transparent WebM output.
+HeyGen uploads narration through `POST /v3/assets`, then creates an audio-driven avatar video through `POST /v3/videos`. The selected avatar must support matting for transparent WebM output.
+
+## Avatar strategies
+
+### Single — default
+
+One continuous HeyGen avatar is created for the complete narration:
+
+```json
+{
+  "avatar": {
+    "provider": "heygen",
+    "strategy": "single"
+  }
+}
+```
+
+This minimizes HeyGen jobs and avoids unnecessary credit usage. Remotion changes the same avatar video's layout across scenes.
+
+### Chaptered — optional for longer videos
+
+First inspect the planned boundaries without spending HeyGen credits:
+
+```bash
+pnpm medavatar chapters demo
+```
+
+Then explicitly enable chapter mode:
+
+```json
+{
+  "avatar": {
+    "provider": "heygen",
+    "strategy": "chaptered",
+    "chapterMaxSeconds": 90
+  }
+}
+```
+
+or temporarily:
+
+```bash
+AVATAR_PROVIDER=heygen AVATAR_STRATEGY=chaptered pnpm medavatar avatar demo
+```
+
+Chapter mode:
+
+1. plans cuts on Scene boundaries;
+2. prefers PPT / medical-animation / hidden-or-PiP boundaries;
+3. splits the master narration with ffmpeg;
+4. renders one HeyGen WebM per chapter;
+5. caches completed chapters;
+6. writes `avatar-manifest.json`;
+7. places each chapter back on the global Remotion timeline while the original narration remains the only audio master.
+
+If chapter 2/3 fails, completed chapter files remain reusable, but a partial manifest is never accepted as a complete render source.
+
+Chapter mode requires ffmpeg. Override the binary if necessary:
+
+```bash
+FFMPEG_BIN=/path/to/ffmpeg
+```
+
+## Medical animation library
+
+Current deterministic React/Remotion components:
+
+```text
+artery-pressure   sustained pressure on the vessel wall
+plaque-growth     endothelial injury → lipid deposition → narrowing
+heart-beat        cardiac workload / heartbeat visualization
+risk-pathway      hypertension → vascular injury → target-organ risk pathway
+```
+
+These are intentionally deterministic rather than generative clinical visuals, so the mechanism can be reviewed and reused consistently.
 
 ## PPT support
 
@@ -119,7 +217,7 @@ Place a deck at:
 projects/demo/slides.pptx
 ```
 
-Install LibreOffice and Poppler (`pdftoppm`) locally, or set:
+Install LibreOffice and Poppler (`pdftoppm`) or configure:
 
 ```bash
 LIBREOFFICE_BIN=/path/to/soffice
@@ -132,49 +230,55 @@ Run only the slide stage:
 pnpm medavatar slides demo
 ```
 
-Generated slide PNGs live under `projects/demo/output/slides/` and are copied to `public/generated/` only for Remotion rendering.
+PowerPoint native animations are not reproduced. Pages are rendered to PNG and then animated/composited by Remotion.
 
 ## CLI
 
 ```bash
 pnpm medavatar storyboard demo
 pnpm medavatar voice demo
+pnpm medavatar chapters demo
 pnpm medavatar avatar demo
 pnpm medavatar slides demo
 pnpm medavatar render demo
 pnpm medavatar build demo
 ```
 
-Expected real-mode output:
+Typical single-avatar output:
 
 ```text
 projects/demo/output/
 ├── scene.json
 ├── timing.json
+├── alignment.json
+├── captions.json
+├── chapters.json
 ├── narration.mp3
 ├── avatar.webm
 ├── slides/
-│   ├── 001.png
-│   └── 002.png
 ├── render-props.json
 ├── .cache.json
 └── final.mp4
 ```
 
-## Important MVP constraints
+Chaptered mode additionally uses:
 
-- one continuous HeyGen avatar video is generated for the narration, then Remotion changes its layout across scenes; this avoids avatar gesture resets at every sentence
-- PPT native animations are not reproduced; static slide pages are animated/composited by Remotion
-- medical mechanism animations are deterministic React/SVG components, not generative clinical imagery
-- HeyGen direct asset upload currently has a 32 MB limit in this implementation; long videos should later be split by chapter or use HeyGen's large-file upload flow
+```text
+projects/demo/output/
+├── audio-chapters/
+├── avatar-chapters/
+└── avatar-manifest.json
+```
 
-## Next
+## Current scope
 
-1. chapter-aware avatar generation for long videos
-2. richer subtitle segmentation and keyword highlighting
-3. reusable reviewed medical animation library
-4. PPT page/scene editor
-5. Web UI after the CLI pipeline is stable
+The CLI pipeline is now suitable for real end-to-end iteration. The next product layer is mainly editing and production ergonomics rather than another provider rewrite:
+
+1. PPT page/scene visual editor
+2. subtitle style presets and terminology pronunciation controls
+3. larger reviewed medical-animation component catalog
+4. chapter transition masking / B-roll transition helpers
+5. Web UI and job progress display
 
 ## Medical publishing guardrails
 
