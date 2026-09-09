@@ -16,9 +16,11 @@ export const projectConfigSchema = z.object({
   avatar: z.object({
     provider: z.enum(['mock', 'heygen']).default('mock'),
     resolution: z.enum(['720p', '1080p', '4k']).default('1080p'),
+    strategy: z.enum(['single', 'chaptered']).default('single'),
+    chapterMaxSeconds: z.number().positive().default(90),
     pollIntervalMs: z.number().int().positive().default(5000),
     timeoutMs: z.number().int().positive().default(20 * 60 * 1000),
-  }).default({provider: 'mock', resolution: '1080p', pollIntervalMs: 5000, timeoutMs: 20 * 60 * 1000}),
+  }).default({provider: 'mock', resolution: '1080p', strategy: 'single', chapterMaxSeconds: 90, pollIntervalMs: 5000, timeoutMs: 20 * 60 * 1000}),
   ppt: z.object({
     file: z.string().default('slides.pptx'),
   }).default({file: 'slides.pptx'}),

@@ -18,6 +18,7 @@ import {MedicalAnimationScene} from './medicalAnimations';
 export type RenderAssets = {
   narration?: string;
   avatar?: string;
+  avatarChapters?: Array<{src: string; start: number; end: number}>;
   slides: string[];
 };
 
@@ -47,10 +48,11 @@ const activeScene = (project: MedAvatarProject, frame: number) => {
   return {scene: project.scenes.at(-1)!, localFrame: 0};
 };
 
-const AvatarTrack: React.FC<{project: MedAvatarProject; avatarSrc?: string}> = ({project, avatarSrc}) => {
-  const frame = useCurrentFrame();
+const AvatarClip: React.FC<{project: MedAvatarProject; avatarSrc?: string; globalStartFrame?: number}> = ({project, avatarSrc, globalStartFrame = 0}) => {
+  const clipFrame = useCurrentFrame();
   const {fps} = useVideoConfig();
-  const {scene, localFrame} = activeScene(project, frame);
+  const globalFrame = clipFrame + globalStartFrame;
+  const {scene, localFrame} = activeScene(project, globalFrame);
   const layout = scene.avatar?.layout ?? (scene.type === 'doctor_full' ? 'fullscreen' : 'bottom-right');
   if (layout === 'hidden') return null;
   const pip = layout !== 'fullscreen';
@@ -65,6 +67,25 @@ const AvatarTrack: React.FC<{project: MedAvatarProject; avatarSrc?: string}> = (
       ) : <MockDoctor />}
     </div>
   );
+};
+
+const AvatarTrack: React.FC<{project: MedAvatarProject; assets: RenderAssets}> = ({project, assets}) => {
+  if (assets.avatarChapters?.length) {
+    return (
+      <>
+        {assets.avatarChapters.map((chapter, index) => {
+          const from = Math.round(chapter.start * project.video.fps);
+          const duration = Math.max(1, Math.round((chapter.end - chapter.start) * project.video.fps));
+          return (
+            <Sequence key={`${chapter.src}-${index}`} from={from} durationInFrames={duration} premountFor={project.video.fps}>
+              <AvatarClip project={project} avatarSrc={chapter.src} globalStartFrame={from} />
+            </Sequence>
+          );
+        })}
+      </>
+    );
+  }
+  return <AvatarClip project={project} avatarSrc={assets.avatar} />;
 };
 
 const SubtitleTrack: React.FC<{project: MedAvatarProject; captions: CaptionCue[]}> = ({project, captions}) => {
@@ -142,7 +163,7 @@ export const MedAvatarVideo: React.FC<{project: MedAvatarProject; assets?: Rende
         const slideSrc = scene.slide ? assets.slides[scene.slide - 1] : undefined;
         return <Sequence key={scene.id} from={start} durationInFrames={duration} premountFor={project.video.fps}><SceneView scene={scene} slideSrc={slideSrc} /></Sequence>;
       })}
-      <AvatarTrack project={project} avatarSrc={assets.avatar} />
+      <AvatarTrack project={project} assets={assets} />
       <div style={{position:'absolute', left:0, right:0, bottom:0, height:190, background:'linear-gradient(180deg, rgba(4,14,22,0) 0%, rgba(4,14,22,.72) 78%)', zIndex:25}} />
       <SubtitleTrack project={project} captions={captions} />
       {assets.narration ? <Audio src={staticFile(assets.narration)} /> : null}
