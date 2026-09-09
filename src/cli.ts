@@ -94,6 +94,8 @@ const voice = async (projectName: string) => {
   const fullText = project.scenes.map((scene) => scene.text).join('\n');
   const {name, provider} = makeTtsProvider(config);
   const outputPath = name === 'elevenlabs' ? paths.narrationMp3 : paths.narrationWav;
+  const staleOutput = name === 'elevenlabs' ? paths.narrationWav : paths.narrationMp3;
+  await rm(staleOutput, {force: true});
   const voiceIdentity = name === 'elevenlabs' ? process.env.ELEVENLABS_VOICE_ID : 'mock';
   const key = sha256(`${name}|${voiceIdentity}|${config.voice.modelId}|${config.voice.outputFormat}|${fullText}`);
   const cache = await readCache(paths.cache);
@@ -126,6 +128,7 @@ const avatar = async (projectName: string) => {
   const {paths, config} = await loadConfig(projectName);
   const name = envProvider('AVATAR_PROVIDER', config.avatar.provider, ['mock', 'heygen'] as const);
   if (name === 'mock') {
+    await rm(paths.avatar, {force: true});
     console.log('✓ avatar mock -> renderer presenter placeholder');
     return null;
   }
@@ -153,6 +156,7 @@ const slides = async (projectName: string) => {
   const {paths, config} = await loadConfig(projectName);
   const pptPath = path.resolve(paths.root, config.ppt.file);
   if (!(await fileExists(pptPath))) {
+    await rm(paths.slides, {recursive: true, force: true});
     console.log(`• slides skipped: ${path.relative(process.cwd(), pptPath)} not found`);
     return [];
   }
