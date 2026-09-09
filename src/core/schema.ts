@@ -15,6 +15,7 @@ export const sceneTypeSchema = z.enum([
 ]);
 
 export const subtitleModeSchema = z.enum(['off', 'sentence', 'karaoke']);
+export const subtitleStyleSchema = z.enum(['medical', 'minimal', 'social']);
 
 export const sceneSchema = z.object({
   id: z.string(),
@@ -28,6 +29,7 @@ export const sceneSchema = z.object({
   }).optional(),
   subtitle: z.object({
     mode: subtitleModeSchema.default('karaoke'),
+    style: subtitleStyleSchema.default('medical'),
     keywords: z.array(z.string()).default([]),
   }).optional(),
   animation: z.object({
@@ -51,3 +53,4 @@ export type Scene = z.infer<typeof sceneSchema>;
 export type MedAvatarProject = z.infer<typeof projectSchema>;
 export type SceneType = z.infer<typeof sceneTypeSchema>;
 export type SubtitleMode = z.infer<typeof subtitleModeSchema>;
+export type SubtitleStyle = z.infer<typeof subtitleStyleSchema>;
