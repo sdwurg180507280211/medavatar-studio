@@ -187,7 +187,24 @@ const manifestIsComplete = async (
   manifest: AvatarChapterManifest | undefined,
   paths: ReturnType<typeof projectPaths>,
 ) => {
-  if (!manifest || manifest.chapters.length === 0) return false;
+  if (!manifest || manifest.chapters.length === 0 || !(await fileExists(paths.chapters))) return false;
+  let planned: AvatarChapterPlan[];
+  try {
+    planned = JSON.parse(await readText(paths.chapters)) as AvatarChapterPlan[];
+  } catch {
+    return false;
+  }
+  if (planned.length !== manifest.chapters.length) return false;
+  const samePlan = manifest.chapters.every((chapter, index) => {
+    const expected = planned[index];
+    return Boolean(
+      expected
+      && chapter.id === expected.id
+      && Math.abs(chapter.start - expected.start) < 0.01
+      && Math.abs(chapter.end - expected.end) < 0.01,
+    );
+  });
+  if (!samePlan) return false;
   const checks = await Promise.all(manifest.chapters.map((chapter) => fileExists(path.join(paths.avatarChapters, chapter.videoFile))));
   return checks.every(Boolean);
 };
