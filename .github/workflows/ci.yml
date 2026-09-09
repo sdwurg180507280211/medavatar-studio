@@ -23,7 +23,7 @@ jobs:
         run: pnpm typecheck
       - name: Mock pipeline smoke test
         run: |
-          pnpm medavatar voice demo
+          TTS_PROVIDER=mock pnpm medavatar voice demo
           test -f projects/demo/output/scene.json
           test -f projects/demo/output/timing.json
           test -f projects/demo/output/narration.wav
