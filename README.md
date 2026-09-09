@@ -31,15 +31,17 @@ final.mp4
 ## Implemented
 
 - `script.md -> scene.json` storyboard pipeline
-- Markdown directives for scene type, PPT page, avatar position, subtitles, keywords and medical animations
+- Markdown directives for scene type, PPT page, avatar position, subtitle mode/style, keywords and medical animations
 - real ElevenLabs timestamped TTS
 - character alignment → scene timing → short timed captions
 - karaoke-style active-character highlighting and keyword emphasis
+- subtitle visual presets: `medical`, `minimal`, `social`
 - scene boundaries preserve ElevenLabs paragraph pauses and initial lead-in
 - real HeyGen v3 asset upload → Digital Twin render → polling → transparent WebM download
 - safe default `single` avatar strategy
 - optional `chaptered` HeyGen strategy for longer videos
 - chapter planning prefers visual/PPT/animation boundaries to hide avatar resets
+- short avatar fade masking at chapter boundaries that can visually hide a pose reset
 - per-stage and per-chapter cache keys to reduce repeated paid generation
 - resumable chapter generation and protection against rendering a partial chapter manifest
 - PPTX → PDF → PNG through LibreOffice + Poppler
@@ -73,13 +75,13 @@ Markdown headings are structural and are not narrated. Put a `medavatar` comment
 ```md
 # 高血压为什么会伤害血管
 
-<!-- medavatar:type=doctor_full avatar=fullscreen subtitle=karaoke -->
+<!-- medavatar:type=doctor_full avatar=fullscreen subtitle=karaoke subtitle_style=medical -->
 很多高血压患者并没有明显的不舒服。
 
-<!-- medavatar:type=doctor_ppt slide=1 avatar=bottom-right scale=0.28 keywords=血压,血管 -->
+<!-- medavatar:type=doctor_ppt slide=1 avatar=bottom-right scale=0.28 subtitle_style=minimal keywords=血压,血管 -->
 持续升高的血压，会让血管壁长期承受更大的机械压力。
 
-<!-- medavatar:type=medical_animation avatar=bottom-right animation=artery-pressure keywords=血管内皮,血压,压力 -->
+<!-- medavatar:type=medical_animation avatar=bottom-right animation=artery-pressure subtitle_style=social keywords=血管内皮,血压,压力 -->
 时间一长，血管内皮更容易受损。
 ```
 
@@ -92,11 +94,18 @@ Supported directive fields:
 | `avatar` | `fullscreen`, `bottom-right`, `bottom-left`, `hidden` |
 | `scale` | `scale=0.28` |
 | `subtitle` | `karaoke`, `sentence`, `off` |
+| `subtitle_style` | `medical`, `minimal`, `social` |
 | `animation` | `artery-pressure`, `plaque-growth`, `heart-beat`, `risk-pathway` |
 | `keywords` | `keywords=血管内皮,血压,压力` |
 | `duration` | optional estimate override, e.g. `duration=8` |
 
 `keywords` are reused by subtitle highlighting and, where applicable, the medical-animation scene.
+
+Subtitle presets are intentionally simple:
+
+- `medical`: balanced dark translucent bar, cyan medical keywords, warm active character
+- `minimal`: smaller/lighter treatment for PPT-heavy course videos
+- `social`: larger high-contrast captions for short-form video
 
 ## Timed captions
 
@@ -187,7 +196,8 @@ Chapter mode:
 4. renders one HeyGen WebM per chapter;
 5. caches completed chapters;
 6. writes `avatar-manifest.json`;
-7. places each chapter back on the global Remotion timeline while the original narration remains the only audio master.
+7. places each chapter back on the global Remotion timeline while the original narration remains the only audio master;
+8. briefly fades the avatar at maskable visual boundaries to reduce visible pose resets.
 
 If chapter 2/3 fails, completed chapter files remain reusable, but a partial manifest is never accepted as a complete render source.
 
@@ -273,12 +283,12 @@ projects/demo/output/
 
 ## Current scope
 
-The CLI pipeline is now suitable for real end-to-end iteration. The next product layer is mainly editing and production ergonomics rather than another provider rewrite:
+The CLI pipeline is now suitable for real end-to-end iteration. The next product layer is mainly editing and production ergonomics:
 
 1. PPT page/scene visual editor
-2. subtitle style presets and terminology pronunciation controls
+2. terminology pronunciation controls
 3. larger reviewed medical-animation component catalog
-4. chapter transition masking / B-roll transition helpers
+4. B-roll / reference-card helpers
 5. Web UI and job progress display
 
 ## Medical publishing guardrails
