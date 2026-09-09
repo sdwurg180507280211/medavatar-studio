@@ -21,12 +21,13 @@ export const applyTimingsToScenes = (scenes: Scene[], timings: TimingSegment[]):
   scenes.map((scene, index) => {
     const timing = timings[index];
     if (!timing) return scene;
-    // Use the next scene's actual start as the cut boundary. This preserves
-    // pauses inserted by TTS between paragraphs instead of silently dropping
-    // them and drifting away from the master narration timeline.
+    // Visual time starts at 0. For scene 1, include any TTS lead-in before the
+    // first spoken character. Later cuts use the next scene's actual speech
+    // start so paragraph pauses stay on the master narration timeline.
+    const visualStart = index === 0 ? 0 : timing.start;
     const boundary = timings[index + 1]?.start ?? timing.end;
     return {
       ...scene,
-      durationInSeconds: Math.max(0.1, boundary - timing.start),
+      durationInSeconds: Math.max(0.1, boundary - visualStart),
     };
   });
