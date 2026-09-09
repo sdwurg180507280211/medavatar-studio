@@ -50,20 +50,21 @@ final.mp4
 
 ## Quick start
 
-Requirements: Node.js 20+ and pnpm.
+Requirements for the lightweight pipeline check: Node.js 20+ and pnpm.
 
 ```bash
 pnpm install
 cp .env.example .env
+TTS_PROVIDER=mock pnpm medavatar voice demo
 ```
 
-For a free pipeline check:
+That command is free and does not require ElevenLabs, HeyGen, LibreOffice or a browser. It validates storyboard, mock narration, scene timing, alignment, captions and chapter planning.
+
+For a complete local MP4 render, install LibreOffice + Poppler for the included `projects/demo/slides.pptx`, and make sure Remotion can launch a Chromium/Chrome runtime. Then run:
 
 ```bash
 TTS_PROVIDER=mock AVATAR_PROVIDER=mock pnpm demo
 ```
-
-The demo repository includes `projects/demo/slides.pptx`, so the PPT conversion/render path can also be exercised locally when LibreOffice and Poppler are installed.
 
 ## Script scene directives
 
