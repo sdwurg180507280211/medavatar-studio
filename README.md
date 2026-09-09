@@ -48,6 +48,8 @@ cp .env.example .env
 pnpm demo
 ```
 
+> **First render hangs at "Bundling" or downloads nothing?** On first render Remotion downloads Chrome Headless Shell from Google's servers, which can stall in regions where that is blocked. Either set a proxy (`https_proxy`/`http_proxy`) or point Remotion at a local Chrome by uncommenting `REMOTION_CHROME_EXECUTABLE` in `.env`. Once cached, later renders skip the download entirely.
+
 Expected output:
 
 ```text

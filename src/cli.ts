@@ -78,7 +78,9 @@ const build = async (projectName: string) => {
   await writeFile(paths.cache, `${JSON.stringify({script: fingerprint}, null, 2)}\n`, 'utf8');
 };
 
-program.command('storyboard <project>').action(storyboard);
+program.command('storyboard <project>').action(async (project) => {
+  await storyboard(project);
+});
 program.command('voice <project>').action(async (project) => {
   await storyboard(project);
   await voice(project);
