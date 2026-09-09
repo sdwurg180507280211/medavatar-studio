@@ -228,10 +228,10 @@ const build = async (projectName: string) => {
   await render(projectName);
 };
 
-program.command('storyboard <project>').action(storyboard);
+program.command('storyboard <project>').action(async (project) => { await storyboard(project); });
 program.command('voice <project>').action(async (project) => { await storyboard(project); await voice(project); });
 program.command('avatar <project>').action(async (project) => { await storyboard(project); await voice(project); await avatar(project); });
-program.command('slides <project>').action(slides);
+program.command('slides <project>').action(async (project) => { await slides(project); });
 program.command('render <project>').action(async (project) => { if (!(await fileExists(projectPaths(project).scene))) await storyboard(project); await render(project); });
 program.command('build <project>').action(build);
 
