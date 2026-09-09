@@ -25,16 +25,20 @@ final.mp4
 ## Implemented
 
 - `script.md -> scene.json`
+- Markdown scene directives for explicit scene type, slide page, avatar position and medical animation
+- Markdown headings are treated as structure and are not spoken
 - scene-level timing driven by ElevenLabs character alignment
 - real ElevenLabs timestamped TTS adapter
 - real HeyGen v3 asset upload → avatar render → polling → transparent WebM download
-- provider selection from `project.json` with `.env` override
+- provider selection from `project.json` with optional `.env` override
 - cache keys for voice, avatar and PPT stages to avoid repeated paid generations
+- stale-output cleanup when switching providers or removing a PPT
 - PPTX → PDF → PNG conversion through LibreOffice + `pdftoppm`
 - Remotion playback of narration, transparent avatar WebM and actual slide PNGs
 - presenter layouts: fullscreen / bottom-right / bottom-left / hidden
 - medical animation component placeholder
 - 1920×1080 / 25 fps demo project
+- CI typecheck plus a free Mock storyboard/voice smoke test
 
 ## Quick start: free mock mode
 
@@ -47,6 +51,37 @@ pnpm demo
 ```
 
 Mock mode does not call ElevenLabs or HeyGen. If `projects/demo/slides.pptx` is absent, the renderer uses slide placeholders.
+
+## Script scene directives
+
+The first Markdown heading is useful as document structure but is not narrated. Add an HTML comment before a narration paragraph when you want explicit visual control:
+
+```md
+# 高血压为什么会伤害血管
+
+<!-- medavatar:type=doctor_full avatar=fullscreen -->
+很多高血压患者并没有明显的不舒服。
+
+<!-- medavatar:type=doctor_ppt slide=1 avatar=bottom-right scale=0.28 -->
+持续升高的血压，会让血管壁长期承受更大的机械压力。
+
+<!-- medavatar:type=medical_animation avatar=bottom-right animation=artery-pressure keywords=血管内皮,血压,压力 -->
+时间一长，血管内皮更容易受损。
+```
+
+Supported directive fields:
+
+| Field | Values / example |
+| --- | --- |
+| `type` | `doctor_full`, `doctor_ppt`, `medical_animation`, `visual_full` |
+| `slide` | `slide=2` |
+| `avatar` | `fullscreen`, `bottom-right`, `bottom-left`, `hidden` |
+| `scale` | `scale=0.28` |
+| `animation` | `animation=artery-pressure` |
+| `keywords` | `keywords=血管内皮,血压,压力` |
+| `duration` | optional estimate override such as `duration=8` |
+
+When no directive is supplied, the MVP still generates a reasonable default scene sequence. Real TTS timing later replaces the estimated scene duration.
 
 ## Real ElevenLabs + HeyGen
 
