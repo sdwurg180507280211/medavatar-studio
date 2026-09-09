@@ -70,12 +70,12 @@ const SubtitleTrack: React.FC<{project: MedAvatarProject}> = ({project}) => {
   return <div style={{position:'absolute', left:250, right:250, bottom:34, textAlign:'center', fontSize:40, lineHeight:1.35, fontWeight:700, color:'#FFFFFF', textShadow:'0 4px 18px rgba(0,0,0,.7)', zIndex:40}}>{scene.text}</div>;
 };
 
-const Slide: React.FC<{scene: Scene; slideSrc?: string}> = ({scene, slideSrc}) => {
+const Slide: React.FC<{scene: Scene; slideSrc?: string; side: 'left' | 'right'}> = ({scene, slideSrc, side}) => {
   const frame = useCurrentFrame();
   const {fps} = useVideoConfig();
   const progress = spring({fps, frame, config:{damping:18}});
   return (
-    <div style={{position:'absolute', left:70, top:60, bottom:120, width:1370, borderRadius:30, background:palette.panel, boxShadow:'0 30px 90px rgba(0,0,0,.26)', overflow:'hidden', transform:`translateY(${interpolate(progress,[0,1],[45,0])}px)`, opacity:progress, color:palette.text}}>
+    <div style={{position:'absolute', ...(side === 'left' ? {left:70} : {right:70}), top:60, bottom:120, width:1240, borderRadius:30, background:palette.panel, boxShadow:'0 30px 90px rgba(0,0,0,.26)', overflow:'hidden', transform:`translateY(${interpolate(progress,[0,1],[45,0])}px)`, opacity:progress, color:palette.text}}>
       {slideSrc ? (
         <Img src={staticFile(slideSrc)} style={{width:'100%', height:'100%', objectFit:'contain', background:'#fff'}} />
       ) : (
@@ -107,14 +107,17 @@ const MedicalAnimation: React.FC<{scene: Scene}> = ({scene}) => {
   );
 };
 
-const SceneView: React.FC<{scene: Scene; slideSrc?: string}> = ({scene, slideSrc}) => (
-  <AbsoluteFill style={{background:`radial-gradient(circle at 20% 10%, #123B59 0%, ${palette.background} 55%)`}}>
-    {scene.type === 'doctor_ppt' ? <Slide scene={scene} slideSrc={slideSrc} /> : null}
-    {scene.type === 'medical_animation' ? <MedicalAnimation scene={scene} /> : null}
-    {scene.type === 'visual_full' ? <Slide scene={scene} slideSrc={slideSrc} /> : null}
-    {scene.type === 'doctor_full' ? <div style={{position:'absolute', left:810, right:120, top:220, fontSize:68, lineHeight:1.45, fontWeight:800, color:'#FFFFFF', textShadow:'0 6px 28px rgba(0,0,0,.55)', zIndex:30}}>{scene.text}</div> : null}
-  </AbsoluteFill>
-);
+const SceneView: React.FC<{scene: Scene; slideSrc?: string}> = ({scene, slideSrc}) => {
+  const slideSide = scene.avatar?.layout === 'bottom-left' ? 'right' : 'left';
+  return (
+    <AbsoluteFill style={{background:`radial-gradient(circle at 20% 10%, #123B59 0%, ${palette.background} 55%)`}}>
+      {scene.type === 'doctor_ppt' ? <Slide scene={scene} slideSrc={slideSrc} side={slideSide} /> : null}
+      {scene.type === 'medical_animation' ? <MedicalAnimation scene={scene} /> : null}
+      {scene.type === 'visual_full' ? <Slide scene={scene} slideSrc={slideSrc} side={slideSide} /> : null}
+      {scene.type === 'doctor_full' ? <div style={{position:'absolute', left:100, top:230, width:588, boxSizing:'border-box', padding:'30px 34px', fontSize:48, lineHeight:1.5, fontWeight:800, color:'#FFFFFF', textShadow:'0 4px 18px rgba(0,0,0,.45)', background:'rgba(7,24,38,.62)', borderRadius:22, zIndex:30}}>{scene.text}</div> : null}
+    </AbsoluteFill>
+  );
+};
 
 export const MedAvatarVideo: React.FC<{project: MedAvatarProject; assets?: RenderAssets}> = ({project, assets = {slides:[]}}) => {
   let from = 0;

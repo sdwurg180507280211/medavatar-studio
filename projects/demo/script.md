@@ -9,7 +9,7 @@
 <!-- medavatar:type=medical_animation avatar=bottom-right animation=artery-pressure keywords=血管内皮,血压,压力 -->
 当血管内皮受损后，炎症反应和脂质沉积更容易发生，动脉粥样硬化风险也随之升高。
 
-<!-- medavatar:type=doctor_ppt slide=2 avatar=bottom-left scale=0.28 -->
+<!-- medavatar:type=doctor_ppt slide=2 avatar=bottom-right scale=0.28 -->
 长期管理高血压，需要关注规律监测、生活方式以及规范治疗，而不是只看有没有症状。
 
 <!-- medavatar:type=doctor_full avatar=fullscreen -->
