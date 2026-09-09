@@ -3,6 +3,10 @@ import {spawn} from 'node:child_process';
 import {copyFile, readFile, readdir, rm} from 'node:fs/promises';
 import path from 'node:path';
 import {Command} from 'commander';
+import {ProxyAgent, setGlobalDispatcher} from 'undici';
+
+const proxyUrl = process.env.https_proxy ?? process.env.HTTPS_PROXY ?? process.env.http_proxy ?? process.env.HTTP_PROXY;
+if (proxyUrl) setGlobalDispatcher(new ProxyAgent(proxyUrl));
 import {projectConfigSchema, type ProjectConfig} from './core/config.js';
 import {ensureDir, fileExists, projectPaths, readText, sha256, writeJson} from './core/io.js';
 import {projectSchema, type MedAvatarProject} from './core/schema.js';
