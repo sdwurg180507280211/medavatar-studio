@@ -1,0 +1,35 @@
+{
+  "name": "medavatar-studio",
+  "private": true,
+  "version": "0.1.0",
+  "description": "AI-powered medical explainer video pipeline with digital avatars, slides, narration and Remotion.",
+  "type": "module",
+  "scripts": {
+    "medavatar": "tsx src/cli.ts",
+    "demo": "tsx src/cli.ts build demo",
+    "studio": "remotion studio remotion/index.tsx",
+    "render:demo": "tsx src/cli.ts render demo",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@remotion/cli": "^4.0.0",
+    "@remotion/media": "^4.0.0",
+    "commander": "^12.1.0",
+    "dotenv": "^16.4.5",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "remotion": "^4.0.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@9.15.0"
+}
