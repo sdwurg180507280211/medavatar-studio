@@ -1,4 +1,4 @@
-import type {MedAvatarProject, SceneType, SubtitleMode} from './core/schema.js';
+import type {MedAvatarProject, SceneType, SubtitleMode, SubtitleStyle} from './core/schema.js';
 
 const DEFAULT_TYPES: SceneType[] = [
   'doctor_full',
@@ -17,6 +17,7 @@ const SCENE_TYPES = new Set<SceneType>([
 type AvatarLayout = 'fullscreen' | 'bottom-right' | 'bottom-left' | 'hidden';
 const AVATAR_LAYOUTS = new Set<AvatarLayout>(['fullscreen', 'bottom-right', 'bottom-left', 'hidden']);
 const SUBTITLE_MODES = new Set<SubtitleMode>(['off', 'sentence', 'karaoke']);
+const SUBTITLE_STYLES = new Set<SubtitleStyle>(['medical', 'minimal', 'social']);
 
 type SceneDirective = {
   type?: SceneType;
@@ -26,6 +27,7 @@ type SceneDirective = {
   animation?: string;
   keywords?: string[];
   subtitle?: SubtitleMode;
+  subtitleStyle?: SubtitleStyle;
   duration?: number;
 };
 
@@ -71,6 +73,9 @@ const parseDirective = (raw: string): SceneDirective => {
     } else if (key === 'subtitle') {
       if (!SUBTITLE_MODES.has(value as SubtitleMode)) throw new Error(`Unknown subtitle mode: ${value}`);
       directive.subtitle = value as SubtitleMode;
+    } else if (key === 'subtitle_style' || key === 'subtitle-style') {
+      if (!SUBTITLE_STYLES.has(value as SubtitleStyle)) throw new Error(`Unknown subtitle style: ${value}`);
+      directive.subtitleStyle = value as SubtitleStyle;
     } else if (key === 'duration') {
       directive.duration = positiveNumber(value, 'duration');
     } else {
@@ -144,6 +149,7 @@ export const scriptToStoryboard = (
       },
       subtitle: {
         mode: directive.subtitle ?? 'karaoke',
+        style: directive.subtitleStyle ?? 'medical',
         keywords,
       },
       animation: isAnimation
