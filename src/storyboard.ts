@@ -1,4 +1,4 @@
-import type {MedAvatarProject, SceneType} from './core/schema.js';
+import type {MedAvatarProject, SceneType, SubtitleMode} from './core/schema.js';
 
 const DEFAULT_TYPES: SceneType[] = [
   'doctor_full',
@@ -16,6 +16,7 @@ const SCENE_TYPES = new Set<SceneType>([
 
 type AvatarLayout = 'fullscreen' | 'bottom-right' | 'bottom-left' | 'hidden';
 const AVATAR_LAYOUTS = new Set<AvatarLayout>(['fullscreen', 'bottom-right', 'bottom-left', 'hidden']);
+const SUBTITLE_MODES = new Set<SubtitleMode>(['off', 'sentence', 'karaoke']);
 
 type SceneDirective = {
   type?: SceneType;
@@ -24,6 +25,7 @@ type SceneDirective = {
   scale?: number;
   animation?: string;
   keywords?: string[];
+  subtitle?: SubtitleMode;
   duration?: number;
 };
 
@@ -66,6 +68,9 @@ const parseDirective = (raw: string): SceneDirective => {
       directive.animation = value;
     } else if (key === 'keywords') {
       directive.keywords = value.split(',').map((item) => item.trim()).filter(Boolean);
+    } else if (key === 'subtitle') {
+      if (!SUBTITLE_MODES.has(value as SubtitleMode)) throw new Error(`Unknown subtitle mode: ${value}`);
+      directive.subtitle = value as SubtitleMode;
     } else if (key === 'duration') {
       directive.duration = positiveNumber(value, 'duration');
     } else {
@@ -90,7 +95,6 @@ const scriptBlocks = (script: string) => {
       if (!block) continue;
     }
 
-    // Markdown headings are structural metadata, not spoken narration.
     if (/^#{1,6}\s+[^\n]+$/.test(block)) continue;
     block = block.replace(/^#{1,6}\s+[^\n]+\n+/, '').trim();
     if (!block) continue;
@@ -125,6 +129,8 @@ export const scriptToStoryboard = (
         : 'fullscreen';
     const layout = directive.avatar ?? defaultLayout;
     const defaultScale = layout === 'fullscreen' ? 1 : 0.28;
+    const defaultKeywords = isAnimation ? ['血管', '压力'] : [];
+    const keywords = directive.keywords ?? defaultKeywords;
 
     return {
       id: `scene-${String(index + 1).padStart(3, '0')}`,
@@ -136,10 +142,14 @@ export const scriptToStoryboard = (
         layout,
         scale: directive.scale ?? defaultScale,
       },
+      subtitle: {
+        mode: directive.subtitle ?? 'karaoke',
+        keywords,
+      },
       animation: isAnimation
         ? {
             name: directive.animation ?? 'artery-pressure',
-            keywords: directive.keywords ?? ['血管', '压力'],
+            keywords,
           }
         : undefined,
     };

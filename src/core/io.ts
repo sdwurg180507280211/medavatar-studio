@@ -24,6 +24,8 @@ export const projectPaths = (projectName: string) => {
     config: path.join(root, 'project.json'),
     scene: path.join(output, 'scene.json'),
     timing: path.join(output, 'timing.json'),
+    alignment: path.join(output, 'alignment.json'),
+    captions: path.join(output, 'captions.json'),
     narrationWav: path.join(output, 'narration.wav'),
     narrationMp3: path.join(output, 'narration.mp3'),
     avatar: path.join(output, 'avatar.webm'),

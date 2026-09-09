@@ -1,4 +1,5 @@
 import type {Scene} from './schema.js';
+import {sceneCharacterRanges} from './alignment.js';
 import type {CharacterAlignment, TimingSegment} from '../providers/types.js';
 
 export const sceneTimingsFromAlignment = (
@@ -6,22 +7,26 @@ export const sceneTimingsFromAlignment = (
   fullText: string,
   alignment: CharacterAlignment,
 ): TimingSegment[] => {
-  let cursor = 0;
-  return scenes.map((scene) => {
-    const startIndex = fullText.indexOf(scene.text, cursor);
-    if (startIndex < 0) {
-      throw new Error(`Could not align scene text: ${scene.id}`);
-    }
-    const endIndex = startIndex + scene.text.length - 1;
-    cursor = endIndex + 1;
-    const start = alignment.character_start_times_seconds[startIndex] ?? 0;
-    const end = alignment.character_end_times_seconds[endIndex] ?? start + scene.durationInSeconds;
+  const ranges = sceneCharacterRanges(scenes, fullText);
+  return scenes.map((scene, index) => {
+    const range = ranges[index];
+    const lastCharacterIndex = Math.max(range.startIndex, range.endIndex - 1);
+    const start = alignment.character_start_times_seconds[range.startIndex] ?? 0;
+    const end = alignment.character_end_times_seconds[lastCharacterIndex] ?? start + scene.durationInSeconds;
     return {text: scene.text, start, end};
   });
 };
 
 export const applyTimingsToScenes = (scenes: Scene[], timings: TimingSegment[]): Scene[] =>
-  scenes.map((scene, index) => ({
-    ...scene,
-    durationInSeconds: Math.max(0.1, (timings[index]?.end ?? scene.durationInSeconds) - (timings[index]?.start ?? 0)),
-  }));
+  scenes.map((scene, index) => {
+    const timing = timings[index];
+    if (!timing) return scene;
+    // Use the next scene's actual start as the cut boundary. This preserves
+    // pauses inserted by TTS between paragraphs instead of silently dropping
+    // them and drifting away from the master narration timeline.
+    const boundary = timings[index + 1]?.start ?? timing.end;
+    return {
+      ...scene,
+      durationInSeconds: Math.max(0.1, boundary - timing.start),
+    };
+  });

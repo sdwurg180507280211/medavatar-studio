@@ -26,4 +26,7 @@ jobs:
           TTS_PROVIDER=mock pnpm medavatar voice demo
           test -f projects/demo/output/scene.json
           test -f projects/demo/output/timing.json
+          test -f projects/demo/output/captions.json
+          test -f projects/demo/output/alignment.json
           test -f projects/demo/output/narration.wav
+          node -e "const c=require('./projects/demo/output/captions.json'); if(!Array.isArray(c)||c.length<2||!c.some(x=>x.characters?.length)) process.exit(1)"

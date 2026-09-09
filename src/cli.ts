@@ -7,6 +7,7 @@ import {ProxyAgent, setGlobalDispatcher} from 'undici';
 
 const proxyUrl = process.env.https_proxy ?? process.env.HTTPS_PROXY ?? process.env.http_proxy ?? process.env.HTTP_PROXY;
 if (proxyUrl) setGlobalDispatcher(new ProxyAgent(proxyUrl));
+import {captionCuesFromAlignment, captionCuesFromSceneDurations, type CaptionCue} from './core/captions.js';
 import {projectConfigSchema, type ProjectConfig} from './core/config.js';
 import {ensureDir, fileExists, projectPaths, readText, sha256, writeJson} from './core/io.js';
 import {projectSchema, type MedAvatarProject} from './core/schema.js';
@@ -15,11 +16,11 @@ import {convertPptToPng} from './ppt.js';
 import {ElevenLabsTtsProvider} from './providers/elevenlabs.js';
 import {HeyGenAvatarProvider} from './providers/heygen.js';
 import {MockTtsProvider} from './providers/mock.js';
-import type {TimingSegment, TtsProvider} from './providers/types.js';
+import type {CharacterAlignment, TimingSegment, TtsProvider} from './providers/types.js';
 import {scriptToStoryboard} from './storyboard.js';
 
 const program = new Command();
-program.name('medavatar').description('MedAvatar Studio CLI').version('0.2.0');
+program.name('medavatar').description('MedAvatar Studio CLI').version('0.3.0');
 
 type CacheFile = Record<string, string | undefined>;
 
@@ -92,6 +93,21 @@ const makeTtsProvider = (config: ProjectConfig): {name: 'mock' | 'elevenlabs'; p
   return {name, provider: new MockTtsProvider()};
 };
 
+const writeCaptionArtifacts = async (
+  project: MedAvatarProject,
+  fullText: string,
+  alignment: CharacterAlignment | undefined,
+  paths: ReturnType<typeof projectPaths>,
+) => {
+  const captions = alignment
+    ? captionCuesFromAlignment(project.scenes, fullText, alignment)
+    : captionCuesFromSceneDurations(project.scenes);
+  await writeJson(paths.captions, captions);
+  if (alignment) await writeJson(paths.alignment, alignment);
+  else await rm(paths.alignment, {force: true});
+  return captions;
+};
+
 const voice = async (projectName: string) => {
   const {paths, config} = await loadConfig(projectName);
   const project = projectSchema.parse(JSON.parse(await readText(paths.scene)));
@@ -105,7 +121,13 @@ const voice = async (projectName: string) => {
   const cache = await readCache(paths.cache);
   if (cache.voice === key && await fileExists(outputPath) && await fileExists(paths.timing)) {
     const timings = JSON.parse(await readText(paths.timing)) as TimingSegment[];
-    await writeJson(paths.scene, {...project, scenes: applyTimingsToScenes(project.scenes, timings)});
+    const timedProject = {...project, scenes: applyTimingsToScenes(project.scenes, timings)};
+    let alignment: CharacterAlignment | undefined;
+    if (await fileExists(paths.alignment)) {
+      alignment = JSON.parse(await readText(paths.alignment)) as CharacterAlignment;
+    }
+    await writeJson(paths.scene, timedProject);
+    await writeCaptionArtifacts(timedProject, fullText, alignment, paths);
     console.log(`✓ voice cache hit -> ${path.relative(process.cwd(), outputPath)}`);
     return {audioPath: outputPath, timings};
   }
@@ -114,8 +136,10 @@ const voice = async (projectName: string) => {
   const timings = result.alignment
     ? sceneTimingsFromAlignment(project.scenes, fullText, result.alignment)
     : cumulativeTimings(project);
+  const timedProject = {...project, scenes: applyTimingsToScenes(project.scenes, timings)};
   await writeJson(paths.timing, timings);
-  await writeJson(paths.scene, {...project, scenes: applyTimingsToScenes(project.scenes, timings)});
+  await writeJson(paths.scene, timedProject);
+  await writeCaptionArtifacts(timedProject, fullText, result.alignment, paths);
   await patchCache(paths.cache, {voice: key});
   console.log(`✓ ${name} narration -> ${path.relative(process.cwd(), outputPath)}`);
   return {audioPath: outputPath, timings};
@@ -212,7 +236,10 @@ const prepareRenderProps = async (projectName: string) => {
   const paths = projectPaths(projectName);
   const project = projectSchema.parse(JSON.parse(await readText(paths.scene)));
   const assets = await stageAssets(projectName);
-  await writeJson(paths.props, {project, assets});
+  const captions: CaptionCue[] = await fileExists(paths.captions)
+    ? JSON.parse(await readText(paths.captions)) as CaptionCue[]
+    : captionCuesFromSceneDurations(project.scenes);
+  await writeJson(paths.props, {project, assets, captions});
   return paths;
 };
 

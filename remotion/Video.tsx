@@ -11,7 +11,9 @@ import {
   useCurrentFrame,
   useVideoConfig,
 } from 'remotion';
+import type {CaptionCue} from '../src/core/captions';
 import type {MedAvatarProject, Scene} from '../src/core/schema';
+import {MedicalAnimationScene} from './medicalAnimations';
 
 export type RenderAssets = {
   narration?: string;
@@ -59,15 +61,43 @@ const AvatarTrack: React.FC<{project: MedAvatarProject; avatarSrc?: string}> = (
   return (
     <div style={{...wrapper, transform:`scale(${interpolate(enter,[0,1],[0.96,1])})`, transformOrigin:'bottom center', display:'flex', alignItems:'flex-end', justifyContent:'center', zIndex:20}}>
       {avatarSrc ? (
-        <OffthreadVideo src={staticFile(avatarSrc)} muted style={{width:'100%', height:'100%', objectFit: pip ? 'cover' : 'contain'}} />
+        <OffthreadVideo src={staticFile(avatarSrc)} muted style={{width:'100%', height:'100%', objectFit:pip ? 'cover' : 'contain'}} />
       ) : <MockDoctor />}
     </div>
   );
 };
 
-const SubtitleTrack: React.FC<{project: MedAvatarProject}> = ({project}) => {
-  const {scene} = activeScene(project, useCurrentFrame());
-  return <div style={{position:'absolute', left:250, right:250, bottom:34, textAlign:'center', fontSize:40, lineHeight:1.35, fontWeight:700, color:'#FFFFFF', textShadow:'0 4px 18px rgba(0,0,0,.7)', zIndex:40}}>{scene.text}</div>;
+const SubtitleTrack: React.FC<{project: MedAvatarProject; captions: CaptionCue[]}> = ({project, captions}) => {
+  const frame = useCurrentFrame();
+  const {fps} = useVideoConfig();
+  const time = frame / fps;
+  const {scene} = activeScene(project, frame);
+  const mode = scene.subtitle?.mode ?? 'karaoke';
+  if (mode === 'off') return null;
+  const cue = captions.find((candidate) => candidate.sceneId === scene.id && time >= candidate.start - 0.02 && time < candidate.end + 0.06);
+  const layout = scene.avatar?.layout ?? (scene.type === 'doctor_full' ? 'fullscreen' : 'bottom-right');
+  const position = layout === 'bottom-right'
+    ? {left:150, right:620}
+    : layout === 'bottom-left'
+      ? {left:620, right:150}
+      : {left:280, right:280};
+  const characters = cue?.characters;
+  return (
+    <div style={{position:'absolute', ...position, bottom:38, minHeight:68, boxSizing:'border-box', padding:'13px 26px 15px', borderRadius:20, background:'rgba(4,14,22,.72)', backdropFilter:'blur(8px)', textAlign:'center', fontSize:40, lineHeight:1.35, fontWeight:760, color:'#FFFFFF', textShadow:'0 3px 14px rgba(0,0,0,.45)', zIndex:45}}>
+      {characters ? characters.map((character, index) => {
+        const active = mode === 'karaoke' && time >= character.start && time < character.end;
+        const spoken = time >= character.end;
+        const color = active
+          ? '#FFE082'
+          : character.keyword
+            ? '#63E5E7'
+            : spoken || mode === 'sentence'
+              ? '#FFFFFF'
+              : 'rgba(255,255,255,.62)';
+        return <span key={`${index}-${character.start}`} style={{display:/\s/.test(character.text) ? 'inline' : 'inline-block', color, transform:active ? 'scale(1.08)' : 'scale(1)', transition:'none'}}>{character.text}</span>;
+      }) : scene.text}
+    </div>
+  );
 };
 
 const Slide: React.FC<{scene: Scene; slideSrc?: string; side: 'left' | 'right'}> = ({scene, slideSrc, side}) => {
@@ -89,37 +119,19 @@ const Slide: React.FC<{scene: Scene; slideSrc?: string; side: 'left' | 'right'}>
   );
 };
 
-const MedicalAnimation: React.FC<{scene: Scene}> = ({scene}) => {
-  const frame = useCurrentFrame();
-  const {fps} = useVideoConfig();
-  const pulse = 1 + Math.sin(frame / fps * Math.PI * 2) * 0.035;
-  const flow = (frame * 10) % 700;
-  return (
-    <div style={{position:'absolute', left:90, top:100, width:1320, height:760, borderRadius:36, background:'#F4FAFD', overflow:'hidden'}}>
-      <div style={{position:'absolute', left:80, top:62, fontSize:34, fontWeight:800, color:palette.text}}>医学机制动画 · {scene.animation?.name ?? 'mechanism'}</div>
-      <div style={{position:'absolute', left:180, right:180, top:300, height:190, borderRadius:120, background:'#E56D72', transform:`scaleY(${pulse})`, transformOrigin:'center'}}>
-        <div style={{position:'absolute', inset:38, borderRadius:90, background:'#8ED4EE', overflow:'hidden'}}>
-          {Array.from({length:6}).map((_,i)=><div key={i} style={{position:'absolute', width:46, height:46, borderRadius:'50%', background:'#F9FAFB', top:34+(i%2)*42, left:((i*150+flow)%900)-100}} />)}
-        </div>
-      </div>
-      <div style={{position:'absolute', left:230, top:570, fontSize:36, fontWeight:700, color:palette.text}}>血流 → 血管压力 → 血管壁变化</div>
-    </div>
-  );
-};
-
 const SceneView: React.FC<{scene: Scene; slideSrc?: string}> = ({scene, slideSrc}) => {
   const slideSide = scene.avatar?.layout === 'bottom-left' ? 'right' : 'left';
   return (
     <AbsoluteFill style={{background:`radial-gradient(circle at 20% 10%, #123B59 0%, ${palette.background} 55%)`}}>
       {scene.type === 'doctor_ppt' ? <Slide scene={scene} slideSrc={slideSrc} side={slideSide} /> : null}
-      {scene.type === 'medical_animation' ? <MedicalAnimation scene={scene} /> : null}
+      {scene.type === 'medical_animation' ? <MedicalAnimationScene scene={scene} /> : null}
       {scene.type === 'visual_full' ? <Slide scene={scene} slideSrc={slideSrc} side={slideSide} /> : null}
       {scene.type === 'doctor_full' ? <div style={{position:'absolute', left:100, top:230, width:588, boxSizing:'border-box', padding:'30px 34px', fontSize:48, lineHeight:1.5, fontWeight:800, color:'#FFFFFF', textShadow:'0 4px 18px rgba(0,0,0,.45)', background:'rgba(7,24,38,.62)', borderRadius:22, zIndex:30}}>{scene.text}</div> : null}
     </AbsoluteFill>
   );
 };
 
-export const MedAvatarVideo: React.FC<{project: MedAvatarProject; assets?: RenderAssets}> = ({project, assets = {slides:[]}}) => {
+export const MedAvatarVideo: React.FC<{project: MedAvatarProject; assets?: RenderAssets; captions?: CaptionCue[]}> = ({project, assets = {slides:[]}, captions = []}) => {
   let from = 0;
   return (
     <AbsoluteFill>
@@ -132,7 +144,7 @@ export const MedAvatarVideo: React.FC<{project: MedAvatarProject; assets?: Rende
       })}
       <AvatarTrack project={project} avatarSrc={assets.avatar} />
       <div style={{position:'absolute', left:0, right:0, bottom:0, height:190, background:'linear-gradient(180deg, rgba(4,14,22,0) 0%, rgba(4,14,22,.72) 78%)', zIndex:25}} />
-      <SubtitleTrack project={project} />
+      <SubtitleTrack project={project} captions={captions} />
       {assets.narration ? <Audio src={staticFile(assets.narration)} /> : null}
     </AbsoluteFill>
   );
