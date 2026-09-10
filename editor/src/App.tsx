@@ -21,6 +21,8 @@ const AVATAR_LAYOUTS: Array<{value: AvatarLayout; label: string}> = [
   {value: 'bottom-right', label: 'Bottom Right'},
   {value: 'hidden', label: 'Hidden'},
 ];
+const visualAvatarLayout = (layout: AvatarLayout | undefined) =>
+  layout === 'fullscreen' ? 'hero' : layout;
 const SCENE_TYPES: Array<{value: SceneType; label: string; short: string}> = [
   {value: 'doctor_full', label: 'Doctor', short: 'Doctor'},
   {value: 'doctor_ppt', label: 'Doctor + PPT', short: 'Dr + PPT'},
@@ -176,8 +178,9 @@ export const App: React.FC = () => {
     0,
   ));
   const portrait = payload.effective.video.height > payload.effective.video.width;
-  const avatarLayout = selected?.avatar?.layout;
-  const avatarScale = selected?.avatar?.scale ?? 0.28;
+  const avatarLayout = visualAvatarLayout(override?.avatar?.layout ?? selected?.avatar?.layout);
+  const effectiveAvatarScale = selected?.avatar?.scale ?? 0.28;
+  const avatarScale = override?.avatar?.scale ?? effectiveAvatarScale;
   const pipScaleEditable = avatarLayout === 'bottom-left' || avatarLayout === 'bottom-right';
   const slideBacked = selected?.type === 'doctor_ppt' || selected?.type === 'visual_full';
   const animationBacked = selected?.type === 'medical_animation';
@@ -403,7 +406,7 @@ export const App: React.FC = () => {
                       <button type="button" className="reset-button" disabled={override?.avatar?.scale === undefined || resolving} onClick={resetAvatarScale}>Reset</button>
                     </div>
                   </div>
-                  <input className="scale-slider" type="range" min="0.18" max="0.50" step="0.01" value={Math.min(0.5, Math.max(0.18, avatarScale))} disabled={!pipScaleEditable || saving} onChange={(event) => changeAvatarScale(Number(event.currentTarget.value))} />
+                  <input aria-label="Avatar scale" className="scale-slider" type="range" min="0.18" max="0.50" step="0.01" value={Math.min(0.5, Math.max(0.18, avatarScale))} disabled={!pipScaleEditable || saving} onChange={(event) => changeAvatarScale(Number(event.currentTarget.value))} />
                   <Provenance base={base?.avatar?.scale?.toFixed(2)} override={override?.avatar?.scale?.toFixed(2)} effective={selected.avatar?.scale?.toFixed(2)} />
                 </div>
               </section>

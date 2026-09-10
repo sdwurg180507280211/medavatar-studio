@@ -47,6 +47,8 @@ For a doctor-led scene, the portrait video becomes the main `hero` visual. The s
 - `script.md -> scene.json` storyboard pipeline
 - optional stable `id=` directives for editor-safe scene identity
 - optional `storyboard.overrides.json` visual override layer keyed by stable scene ID
+- local three-panel Editor with live Draft → Resolve → Preview and explicit Save / Reset
+- Inspector controls for scene type, slide or medical-animation source, subtitle style, avatar layout and circular PiP scale
 - Markdown headings become visual `scene.title` values and are never sent to TTS
 - narration remains in `scene.text`
 - explicit `hero` presenter layout; legacy `fullscreen` is accepted as a `hero` alias
@@ -269,6 +271,7 @@ pnpm medavatar avatar demo
 pnpm medavatar slides demo
 pnpm medavatar render demo
 pnpm medavatar build demo
+pnpm medavatar editor demo
 ```
 
 ## Current scope
