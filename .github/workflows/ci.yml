@@ -34,3 +34,4 @@ jobs:
           node -e "const c=require('./projects/demo/output/captions.json'); if(!Array.isArray(c)||c.length<2||!c.some(x=>x.characters?.length)) process.exit(1)"
           node -e "const c=require('./projects/demo/output/chapters.json'); if(!Array.isArray(c)||c.length<1||c.some(x=>x.duration<=0)) process.exit(1)"
           pnpm exec tsx -e "import {scriptToStoryboard} from './src/storyboard.ts'; let ok=false; try { scriptToStoryboard('x', '<!-- medavatar:id=same -->\\n甲\\n\\n<!-- medavatar:id=same -->\\n乙'); } catch (error) { ok=String(error).includes('Duplicate medavatar scene id'); } if (!ok) process.exit(1);"
+          pnpm exec tsx -e "import {loadPreviewProps} from './src/production/renderProps.ts'; const run=async()=>{const p=await loadPreviewProps('demo'); if(p.timeline.source!=='actual'||p.timeline.stale||p.effective.scenes[2]?.subtitle?.style!=='social'||!Array.isArray(p.captions)||p.captions.length<2) process.exit(1);}; run();"

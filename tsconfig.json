@@ -12,5 +12,5 @@
     "types": ["node"],
     "noEmit": true
   },
-  "include": ["src/**/*.ts", "remotion/**/*.ts", "remotion/**/*.tsx"]
+  "include": ["src/**/*.ts", "editor/src/**/*.ts", "editor/src/**/*.tsx", "remotion/**/*.ts", "remotion/**/*.tsx"]
 }
