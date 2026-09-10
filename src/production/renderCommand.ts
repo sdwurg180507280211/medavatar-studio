@@ -10,7 +10,8 @@ const run = (command: string, args: string[]) => new Promise<void>((resolve, rej
 
 export const renderProject = async (projectName: string) => {
   const {paths, state} = await prepareRenderProps(projectName);
-  const defaultConcurrency = state.effective.video.height > state.effective.video.width ? '2' : undefined;
+  // A 1080x1920 composition with a transparent VP9 source is memory-heavy in Chromium.
+  const defaultConcurrency = state.effective.video.height > state.effective.video.width ? '4' : undefined;
   const concurrency = process.env.REMOTION_CONCURRENCY ?? defaultConcurrency;
   if (state.timeline.stale) {
     console.warn('• narration timing is stale; rendering uses estimated scene timing and omits stale narration/avatar media');

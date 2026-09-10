@@ -31,6 +31,7 @@ export const projectPaths = (projectName: string) => {
     narrationWav: path.join(output, 'narration.wav'),
     narrationMp3: path.join(output, 'narration.mp3'),
     avatar: path.join(output, 'avatar.webm'),
+    avatarMetadata: path.join(output, 'avatar-metadata.json'),
     avatarManifest: path.join(output, 'avatar-manifest.json'),
     avatarChapters: path.join(output, 'avatar-chapters'),
     audioChapters: path.join(output, 'audio-chapters'),

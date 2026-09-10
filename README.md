@@ -81,11 +81,13 @@ TTS_PROVIDER=mock pnpm medavatar voice demo
 
 That command is free and does not require ElevenLabs, HeyGen, LibreOffice or a browser.
 
-For a complete local MP4 render, install LibreOffice + Poppler for the included `projects/demo/slides.pptx`, and make sure Remotion can launch Chromium/Chrome:
+For a complete local MP4 render, install LibreOffice + Poppler for the included `projects/demo/slides.pptx`, make sure Remotion can launch Chromium/Chrome, and have `ffmpeg`/`ffprobe` available when using a real HeyGen avatar:
 
 ```bash
 TTS_PROVIDER=mock AVATAR_PROVIDER=mock pnpm demo
 ```
+
+Portrait rendering defaults to a Chromium concurrency of `4` for predictable memory use. Override it for a faster or more conservative local render with `REMOTION_CONCURRENCY=2` or `REMOTION_CONCURRENCY=8`.
 
 ## Script scene directives
 
@@ -186,6 +188,14 @@ TTS_PROVIDER=elevenlabs AVATAR_PROVIDER=heygen pnpm medavatar build demo
 ```
 
 HeyGen uploads narration through `POST /v3/assets`, then creates the portrait avatar through `POST /v3/videos` with a fixed `9:16` aspect ratio.
+
+Real HeyGen runs request `output_format: "webm"` without a `background`. When the selected Avatar supports matting, HeyGen returns a VP9 WebM with Alpha. The avatar stage checks both the API's reported output format and the downloaded file's `ALPHA_MODE` plus decoded Alpha pixels before accepting or caching it. Override the local media tools when necessary:
+
+```bash
+FFMPEG_BIN=/path/to/ffmpeg FFPROBE_BIN=/path/to/ffprobe
+```
+
+Do not add `background` to the transparent WebM request: HeyGen rejects `background` together with `output_format: "webm"`. Use an opaque `mp4` request with an explicit background only as a separate fallback mode.
 
 ## Avatar strategies
 

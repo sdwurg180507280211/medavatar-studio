@@ -17,6 +17,16 @@ export type NarrationResult = {
   alignment?: CharacterAlignment;
 };
 
+export type AvatarRenderResult = {
+  videoPath: string;
+  videoId?: string;
+  assetId?: string;
+  requestedOutputFormat?: string;
+  outputFormat?: string;
+  transparent?: boolean;
+  alphaMode?: string;
+};
+
 export interface TtsProvider {
   synthesize(input: {
     text: string;
@@ -29,5 +39,5 @@ export interface AvatarProvider {
     audioPath: string;
     outputPath: string;
     title?: string;
-  }): Promise<{videoPath: string; videoId?: string; assetId?: string}>;
+  }): Promise<AvatarRenderResult>;
 }

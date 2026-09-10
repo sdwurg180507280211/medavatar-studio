@@ -1,15 +1,133 @@
+import {spawn} from 'node:child_process';
 import {randomUUID} from 'node:crypto';
-import {mkdir, readFile, stat, writeFile} from 'node:fs/promises';
+import {mkdir, readFile, rm, stat, writeFile} from 'node:fs/promises';
 import path from 'node:path';
-import type {AvatarProvider} from './types.js';
+import type {AvatarProvider, AvatarRenderResult} from './types.js';
 
 export const HEYGEN_AVATAR_ASPECT_RATIO = '9:16' as const;
+export const HEYGEN_OUTPUT_FORMAT = 'webm' as const;
+
+const validateOutputFormat = (value: unknown, source: string) => {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    throw new Error(`${source} returned an invalid output_format.`);
+  }
+  if (value.toLowerCase() !== HEYGEN_OUTPUT_FORMAT) {
+    throw new Error(`${source} returned output_format=${value}; expected ${HEYGEN_OUTPUT_FORMAT}.`);
+  }
+  return value;
+};
+
+type CommandResult = {
+  code: number | null;
+  signal: NodeJS.Signals | null;
+  stdout: Buffer;
+  stderr: Buffer;
+};
+
+const captureCommand = (command: string, args: string[]): Promise<Buffer> => new Promise((resolve, reject) => {
+  const child = spawn(command, args, {
+    stdio: ['ignore', 'pipe', 'pipe'],
+    shell: process.platform === 'win32',
+  });
+  const stdout: Buffer[] = [];
+  const stderr: Buffer[] = [];
+  child.stdout.on('data', (chunk: Buffer) => stdout.push(chunk));
+  child.stderr.on('data', (chunk: Buffer) => stderr.push(chunk));
+  child.once('error', (error) => reject(new Error(`Could not run ${command}: ${error.message}`)));
+  child.once('close', (code, signal) => {
+    if (code === 0) {
+      resolve(Buffer.concat(stdout));
+      return;
+    }
+    const result: CommandResult = {code, signal, stdout: Buffer.concat(stdout), stderr: Buffer.concat(stderr)};
+    const detail = result.stderr.toString('utf8').trim();
+    reject(new Error(`${command} exited with ${signal ? `signal ${signal}` : `code ${code}`}${detail ? `: ${detail}` : ''}`));
+  });
+});
+
+export type HeyGenAlphaInspection = {
+  alphaMode?: string;
+  transparentPixels: number;
+  semiTransparentPixels: number;
+  sampledPixels: number;
+};
+
+type HeyGenProbe = {
+  streams?: Array<{
+    tags?: Record<string, string | undefined>;
+  }>;
+};
+
+export const inspectTransparentWebm = async (
+  file: string,
+  options: {ffprobeBin?: string; ffmpegBin?: string} = {},
+): Promise<HeyGenAlphaInspection> => {
+  const ffprobeBin = options.ffprobeBin ?? process.env.FFPROBE_BIN ?? 'ffprobe';
+  const ffmpegBin = options.ffmpegBin ?? process.env.FFMPEG_BIN ?? 'ffmpeg';
+  const probeOutput = await captureCommand(ffprobeBin, [
+    '-v', 'error',
+    '-select_streams', 'v:0',
+    '-show_entries', 'stream=codec_name:stream_tags=ALPHA_MODE',
+    '-of', 'json',
+    file,
+  ]);
+  let probe: HeyGenProbe;
+  try {
+    probe = JSON.parse(probeOutput.toString('utf8')) as HeyGenProbe;
+  } catch (error) {
+    throw new Error(`Could not parse ${ffprobeBin} output for ${file}: ${String(error)}`);
+  }
+  const tags = probe.streams?.[0]?.tags ?? {};
+  const alphaMode = tags.ALPHA_MODE ?? tags.alpha_mode;
+
+  const alphaBytes = await captureCommand(ffmpegBin, [
+    '-hide_banner',
+    '-loglevel', 'error',
+    '-c:v', 'libvpx-vp9',
+    '-i', file,
+    '-map', '0:v:0',
+    '-frames:v', '5',
+    '-vf', 'alphaextract',
+    '-pix_fmt', 'gray',
+    '-f', 'rawvideo',
+    '-',
+  ]);
+  let transparentPixels = 0;
+  let semiTransparentPixels = 0;
+  for (const value of alphaBytes) {
+    if (value === 0) transparentPixels += 1;
+    else if (value < 255) semiTransparentPixels += 1;
+  }
+  const inspection = {
+    alphaMode,
+    transparentPixels,
+    semiTransparentPixels,
+    sampledPixels: alphaBytes.length,
+  } satisfies HeyGenAlphaInspection;
+  if (alphaBytes.length === 0 || transparentPixels + semiTransparentPixels === 0) {
+    throw new Error(
+      `HeyGen returned ${file} without decoded transparency `
+      + `(ALPHA_MODE=${alphaMode ?? 'missing'}). The selected Avatar may not be matting-enabled.`,
+    );
+  }
+  return inspection;
+};
 
 type HeyGenVideo = {
   id: string;
   status: string;
   video_url?: string | null;
   failure_message?: string | null;
+  output_format?: unknown;
+};
+
+type HeyGenCreateResponse = {
+  data?: {
+    video_id: string;
+    status?: string;
+    output_format?: unknown;
+  };
 };
 
 export class HeyGenAvatarProvider implements AvatarProvider {
@@ -45,7 +163,10 @@ export class HeyGenAvatarProvider implements AvatarProvider {
     if (!response.ok) {
       throw new Error(`HeyGen asset upload failed: ${response.status} ${await response.text()}`);
     }
-    const json = (await response.json()) as {data: {asset_id: string}};
+    const json = (await response.json()) as {data?: {asset_id?: unknown}};
+    if (!json.data || typeof json.data.asset_id !== 'string' || json.data.asset_id.length === 0) {
+      throw new Error('HeyGen asset upload response did not include data.asset_id.');
+    }
     return json.data.asset_id;
   }
 
@@ -62,15 +183,22 @@ export class HeyGenAvatarProvider implements AvatarProvider {
         title,
         resolution: this.options.resolution ?? '1080p',
         aspect_ratio: HEYGEN_AVATAR_ASPECT_RATIO,
-        output_format: 'webm',
+        output_format: HEYGEN_OUTPUT_FORMAT,
         audio_asset_id: audioAssetId,
       }),
     });
     if (!response.ok) {
       throw new Error(`HeyGen video create failed: ${response.status} ${await response.text()}`);
     }
-    const json = (await response.json()) as {data: {video_id: string}};
-    return json.data.video_id;
+    const json = (await response.json()) as HeyGenCreateResponse;
+    if (!json.data || typeof json.data.video_id !== 'string' || json.data.video_id.length === 0) {
+      throw new Error('HeyGen video create response did not include data.video_id.');
+    }
+    const apiOutputFormat = validateOutputFormat(json.data.output_format, 'HeyGen video create response');
+    return {
+      videoId: json.data.video_id,
+      apiOutputFormat,
+    };
   }
 
   private async getVideo(videoId: string): Promise<HeyGenVideo> {
@@ -80,7 +208,10 @@ export class HeyGenAvatarProvider implements AvatarProvider {
     if (!response.ok) {
       throw new Error(`HeyGen video status failed: ${response.status} ${await response.text()}`);
     }
-    const json = (await response.json()) as {data: HeyGenVideo};
+    const json = (await response.json()) as {data?: HeyGenVideo};
+    if (!json.data || typeof json.data.status !== 'string') {
+      throw new Error(`HeyGen video status response for ${videoId} did not include data.status.`);
+    }
     return json.data;
   }
 
@@ -90,8 +221,12 @@ export class HeyGenAvatarProvider implements AvatarProvider {
     const pollIntervalMs = this.options.pollIntervalMs ?? 5000;
     while (Date.now() - started < timeoutMs) {
       const video = await this.getVideo(videoId);
-      if (video.status === 'completed' && video.video_url) return video.video_url;
-      if (video.status === 'failed') {
+      const status = video.status.toLowerCase();
+      if (status === 'completed' && video.video_url) {
+        validateOutputFormat(video.output_format, `HeyGen completed video ${videoId}`);
+        return video;
+      }
+      if (status === 'failed') {
         throw new Error(`HeyGen render failed: ${video.failure_message ?? 'unknown error'}`);
       }
       await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
@@ -101,12 +236,28 @@ export class HeyGenAvatarProvider implements AvatarProvider {
 
   async render({audioPath, outputPath, title}: {audioPath: string; outputPath: string; title?: string}) {
     const assetId = await this.uploadAudio(audioPath);
-    const videoId = await this.createVideo(assetId, title);
-    const videoUrl = await this.waitForVideo(videoId);
-    const response = await fetch(videoUrl);
+    const created = await this.createVideo(assetId, title);
+    const completed = await this.waitForVideo(created.videoId);
+    const response = await fetch(completed.video_url!);
     if (!response.ok) throw new Error(`HeyGen download failed: ${response.status}`);
     await mkdir(path.dirname(outputPath), {recursive: true});
     await writeFile(outputPath, Buffer.from(await response.arrayBuffer()));
-    return {videoPath: outputPath, videoId, assetId};
+    try {
+      const alpha = await inspectTransparentWebm(outputPath);
+      return {
+        videoPath: outputPath,
+        videoId: created.videoId,
+        assetId,
+        requestedOutputFormat: HEYGEN_OUTPUT_FORMAT,
+        outputFormat: validateOutputFormat(completed.output_format, `HeyGen completed video ${created.videoId}`)
+          ?? created.apiOutputFormat
+          ?? HEYGEN_OUTPUT_FORMAT,
+        transparent: true,
+        alphaMode: alpha.alphaMode,
+      } satisfies AvatarRenderResult;
+    } catch (error) {
+      await rm(outputPath, {force: true});
+      throw error;
+    }
   }
 }

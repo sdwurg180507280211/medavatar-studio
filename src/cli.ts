@@ -16,7 +16,7 @@ import {projectSchema, type MedAvatarProject} from './core/schema.js';
 import {applyTimingsToScenes, sceneTimingsFromAlignment} from './core/timing.js';
 import {convertPptToPng} from './ppt.js';
 import {ElevenLabsTtsProvider} from './providers/elevenlabs.js';
-import {HeyGenAvatarProvider, HEYGEN_AVATAR_ASPECT_RATIO} from './providers/heygen.js';
+import {HeyGenAvatarProvider, HEYGEN_AVATAR_ASPECT_RATIO, HEYGEN_OUTPUT_FORMAT, inspectTransparentWebm} from './providers/heygen.js';
 import {MockTtsProvider} from './providers/mock.js';
 import type {CharacterAlignment, TimingSegment, TtsProvider} from './providers/types.js';
 import {renderProject} from './production/renderCommand.js';
@@ -25,7 +25,8 @@ import {scriptToStoryboard} from './storyboard.js';
 const program = new Command();
 program.name('medavatar').description('MedAvatar Studio CLI').version('0.4.1');
 
-const AVATAR_PRESENTATION_CACHE_VERSION = 'portrait-source-v1';
+const AVATAR_PRESENTATION_CACHE_VERSION = 'portrait-alpha-v2';
+const LEGACY_AVATAR_PRESENTATION_CACHE_VERSION = 'portrait-source-v1';
 
 type CacheFile = Record<string, string | undefined>;
 type AvatarStrategy = 'single' | 'chaptered';
@@ -224,16 +225,57 @@ const renderSingleAvatar = async (
   audioPath: string,
   avatarId: string,
 ) => {
+  await rm(paths.avatarMetadata, {force: true});
   await rm(paths.avatarManifest, {force: true});
   await rm(paths.avatarChapters, {recursive: true, force: true});
   await rm(paths.audioChapters, {recursive: true, force: true});
   const audio = await readFile(audioPath);
-  const identity = `single|${avatarId}|${config.avatar.resolution}|${HEYGEN_AVATAR_ASPECT_RATIO}`;
+  const identity = `single|${avatarId}|${config.avatar.resolution}|${HEYGEN_AVATAR_ASPECT_RATIO}|${HEYGEN_OUTPUT_FORMAT}|transparent`;
   const key = sha256(Buffer.concat([audio, Buffer.from(`|${identity}|${AVATAR_PRESENTATION_CACHE_VERSION}`)]));
+  const legacyIdentity = `single|${avatarId}|${config.avatar.resolution}|${HEYGEN_AVATAR_ASPECT_RATIO}`;
+  const legacyKey = sha256(Buffer.concat([audio, Buffer.from(`|${legacyIdentity}|${LEGACY_AVATAR_PRESENTATION_CACHE_VERSION}`)]));
   const cache = await readCache(paths.cache);
 
-  if (cache.avatar === key && await fileExists(paths.avatar)) {
-    console.log(`✓ avatar cache hit -> ${path.relative(process.cwd(), paths.avatar)}`);
+  const validateCachedAvatar = async () => {
+    if (!(await fileExists(paths.avatar))) return undefined;
+    try {
+      return await inspectTransparentWebm(paths.avatar);
+    } catch (error) {
+      console.warn(`• cached avatar transparency validation failed: ${error instanceof Error ? error.message : String(error)}`);
+      return undefined;
+    }
+  };
+
+  const cachedAlpha = cache.avatar === key ? await validateCachedAvatar() : undefined;
+  if (cachedAlpha) {
+    await writeJson(paths.avatarMetadata, {
+      provider: 'heygen',
+      strategy: 'single',
+      avatarId,
+      requestedOutputFormat: HEYGEN_OUTPUT_FORMAT,
+      outputFormat: HEYGEN_OUTPUT_FORMAT,
+      transparent: true,
+      alphaMode: cachedAlpha.alphaMode,
+      cache: 'validated',
+    });
+    console.log(`✓ avatar cache hit (Alpha validated) -> ${path.relative(process.cwd(), paths.avatar)}`);
+    return paths.avatar;
+  }
+
+  const legacyAlpha = cache.avatar === legacyKey ? await validateCachedAvatar() : undefined;
+  if (legacyAlpha) {
+    await patchCache(paths.cache, {avatar: key});
+    await writeJson(paths.avatarMetadata, {
+      provider: 'heygen',
+      strategy: 'single',
+      avatarId,
+      requestedOutputFormat: HEYGEN_OUTPUT_FORMAT,
+      outputFormat: HEYGEN_OUTPUT_FORMAT,
+      transparent: true,
+      alphaMode: legacyAlpha.alphaMode,
+      cache: 'migrated',
+    });
+    console.log(`✓ avatar cache migrated (Alpha validated) -> ${path.relative(process.cwd(), paths.avatar)}`);
     return paths.avatar;
   }
 
@@ -242,7 +284,19 @@ const renderSingleAvatar = async (
     pollIntervalMs: config.avatar.pollIntervalMs,
     timeoutMs: config.avatar.timeoutMs,
   });
-  await provider.render({audioPath, outputPath: paths.avatar, title: config.title});
+  const result = await provider.render({audioPath, outputPath: paths.avatar, title: config.title});
+  await writeJson(paths.avatarMetadata, {
+    provider: 'heygen',
+    strategy: 'single',
+    avatarId,
+    videoId: result.videoId,
+    assetId: result.assetId,
+    requestedOutputFormat: result.requestedOutputFormat,
+    outputFormat: result.outputFormat,
+    transparent: result.transparent,
+    alphaMode: result.alphaMode,
+    cache: 'generated',
+  });
   await rm(path.join(paths.output, 'avatar-raw.webm'), {force: true});
   await patchCache(paths.cache, {avatar: key});
   console.log(`✓ heygen ${HEYGEN_AVATAR_ASPECT_RATIO} portrait avatar -> ${path.relative(process.cwd(), paths.avatar)}`);
@@ -256,6 +310,7 @@ const renderChapteredAvatar = async (
   audioPath: string,
   avatarId: string,
 ) => {
+  await rm(paths.avatarMetadata, {force: true});
   await rm(paths.avatar, {force: true});
   const project = projectSchema.parse(JSON.parse(await readText(paths.scene)));
   const plan = planAvatarChapters(project.scenes, config.avatar.chapterMaxSeconds);
@@ -263,13 +318,37 @@ const renderChapteredAvatar = async (
   const fullAudio = await readFile(audioPath);
   const globalKey = sha256(Buffer.concat([
     fullAudio,
-    Buffer.from(`|chaptered|${avatarId}|${config.avatar.resolution}|${HEYGEN_AVATAR_ASPECT_RATIO}|${AVATAR_PRESENTATION_CACHE_VERSION}|${config.avatar.chapterMaxSeconds}|${JSON.stringify(plan)}`),
+    Buffer.from(`|chaptered|${avatarId}|${config.avatar.resolution}|${HEYGEN_AVATAR_ASPECT_RATIO}|${HEYGEN_OUTPUT_FORMAT}|transparent|${AVATAR_PRESENTATION_CACHE_VERSION}|${config.avatar.chapterMaxSeconds}|${JSON.stringify(plan)}`),
   ]));
   const cache = await readCache(paths.cache);
   const existingManifest = await readAvatarManifest(paths.avatarManifest);
   if (cache.avatar === globalKey && await manifestIsComplete(existingManifest, paths)) {
-    console.log(`✓ chaptered avatar cache hit -> ${existingManifest!.chapters.length} chapters`);
-    return paths.avatarManifest;
+    const validated = [] as Array<{id: string; videoFile: string; alphaMode?: string}>;
+    let allTransparent = true;
+    for (const chapter of existingManifest!.chapters) {
+      try {
+        const inspection = await inspectTransparentWebm(path.join(paths.avatarChapters, chapter.videoFile));
+        validated.push({...chapter, alphaMode: inspection.alphaMode});
+      } catch (error) {
+        allTransparent = false;
+        console.warn(`• cached ${chapter.id} transparency validation failed: ${error instanceof Error ? error.message : String(error)}`);
+        break;
+      }
+    }
+    if (allTransparent) {
+      await writeJson(paths.avatarMetadata, {
+        provider: 'heygen',
+        strategy: 'chaptered',
+        avatarId,
+        requestedOutputFormat: HEYGEN_OUTPUT_FORMAT,
+        outputFormat: HEYGEN_OUTPUT_FORMAT,
+        transparent: true,
+        cache: 'validated',
+        chapters: validated,
+      });
+      console.log(`✓ chaptered avatar cache hit (Alpha validated) -> ${existingManifest!.chapters.length} chapters`);
+      return paths.avatarManifest;
+    }
   }
 
   const audioFiles = await splitAudioIntoChapters(audioPath, plan, paths.audioChapters);
@@ -281,27 +360,71 @@ const renderChapteredAvatar = async (
   });
   const previous = existingManifest?.chapters ?? [];
   const completed: AvatarChapterManifestEntry[] = [];
+  const metadataChapters: Array<{
+    id: string;
+    videoFile: string;
+    videoId?: string;
+    assetId?: string;
+    outputFormat?: string;
+    transparent: boolean;
+    alphaMode?: string;
+  }> = [];
 
   for (let index = 0; index < plan.length; index += 1) {
     const chapter = plan[index];
     const chapterAudio = await readFile(audioFiles[index]);
     const hash = sha256(Buffer.concat([
       chapterAudio,
-      Buffer.from(`|${avatarId}|${config.avatar.resolution}|${HEYGEN_AVATAR_ASPECT_RATIO}|${AVATAR_PRESENTATION_CACHE_VERSION}`),
+      Buffer.from(`|${avatarId}|${config.avatar.resolution}|${HEYGEN_AVATAR_ASPECT_RATIO}|${HEYGEN_OUTPUT_FORMAT}|transparent|${AVATAR_PRESENTATION_CACHE_VERSION}`),
     ]));
     const videoFile = `${chapter.id}.webm`;
     const videoPath = path.join(paths.avatarChapters, videoFile);
     const reusable = previous.find(
       (entry) => entry.id === chapter.id && entry.hash === hash && entry.videoFile === videoFile,
     );
+    let reusedInspection: Awaited<ReturnType<typeof inspectTransparentWebm>> | undefined;
     if (reusable && await fileExists(videoPath)) {
+      try {
+        reusedInspection = await inspectTransparentWebm(videoPath);
+      } catch (error) {
+        console.warn(`• cached ${chapter.id} transparency validation failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+    if (reusable && reusedInspection) {
       completed.push({...chapter, hash, videoFile});
-      console.log(`✓ ${chapter.id} avatar cache hit`);
+      metadataChapters.push({
+        id: chapter.id,
+        videoFile,
+        outputFormat: HEYGEN_OUTPUT_FORMAT,
+        transparent: true,
+        alphaMode: reusedInspection.alphaMode,
+      });
+      console.log(`✓ ${chapter.id} avatar cache hit (Alpha validated)`);
     } else {
-      await provider.render({
+      const result = await provider.render({
         audioPath: audioFiles[index],
         outputPath: videoPath,
         title: `${config.title} · ${chapter.id}`,
+      });
+      metadataChapters.push({
+        id: chapter.id,
+        videoFile,
+        videoId: result.videoId,
+        assetId: result.assetId,
+        outputFormat: result.outputFormat,
+        transparent: result.transparent === true,
+        alphaMode: result.alphaMode,
+      });
+      await writeJson(paths.avatarMetadata, {
+        provider: 'heygen',
+        strategy: 'chaptered',
+        avatarId,
+        requestedOutputFormat: HEYGEN_OUTPUT_FORMAT,
+        outputFormat: result.outputFormat,
+        transparent: result.transparent,
+        alphaMode: result.alphaMode,
+        cache: 'generated',
+        chapters: metadataChapters,
       });
       completed.push({...chapter, hash, videoFile});
       console.log(`✓ ${chapter.id} heygen ${HEYGEN_AVATAR_ASPECT_RATIO} portrait avatar`);
@@ -318,6 +441,16 @@ const renderChapteredAvatar = async (
       await rm(path.join(paths.avatarChapters, file), {force: true});
     }
   }
+  await writeJson(paths.avatarMetadata, {
+    provider: 'heygen',
+    strategy: 'chaptered',
+    avatarId,
+    requestedOutputFormat: HEYGEN_OUTPUT_FORMAT,
+    outputFormat: HEYGEN_OUTPUT_FORMAT,
+    transparent: true,
+    cache: metadataChapters.some((chapter) => chapter.videoId) ? 'generated' : 'validated',
+    chapters: metadataChapters,
+  });
   await patchCache(paths.cache, {avatar: globalKey});
   console.log(`✓ chaptered heygen avatar -> ${completed.length} portrait chapters`);
   return paths.avatarManifest;
@@ -333,6 +466,7 @@ const avatar = async (projectName: string) => {
   );
   if (name === 'mock') {
     await rm(paths.avatar, {force: true});
+    await rm(paths.avatarMetadata, {force: true});
     await rm(path.join(paths.output, 'avatar-raw.webm'), {force: true});
     await rm(paths.avatarManifest, {force: true});
     await rm(paths.avatarChapters, {recursive: true, force: true});
