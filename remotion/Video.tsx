@@ -122,12 +122,12 @@ const AvatarClip: React.FC<{
   const pip = layout !== 'fullscreen';
   const enter = spring({fps, frame: localFrame, config:{damping:18}});
   const wrapper: React.CSSProperties = pip
-    ? {position:'absolute', width:520, height:620, bottom:58, right:layout === 'bottom-right' ? 45 : undefined, left:layout === 'bottom-left' ? 45 : undefined, borderRadius:26, overflow:'hidden', boxShadow:'0 24px 60px rgba(0,0,0,.4)'}
+    ? {position:'absolute', width:470, height:840, bottom:36, right:layout === 'bottom-right' ? 42 : undefined, left:layout === 'bottom-left' ? 42 : undefined}
     : {position:'absolute', inset:0};
   return (
     <div style={{...wrapper, opacity, transform:`scale(${interpolate(enter,[0,1],[0.96,1])})`, transformOrigin:'bottom center', display:'flex', alignItems:'flex-end', justifyContent:'center', zIndex:20}}>
       {avatarSrc ? (
-        <OffthreadVideo src={staticFile(avatarSrc)} muted style={{width:'100%', height:'100%', objectFit:pip ? 'cover' : 'contain'}} />
+        <OffthreadVideo src={staticFile(avatarSrc)} muted style={{width:'100%', height:'100%', objectFit:'contain'}} />
       ) : <MockDoctor />}
     </div>
   );

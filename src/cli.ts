@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import {spawn} from 'node:child_process';
-import {copyFile, readFile, readdir, rm} from 'node:fs/promises';
+import {copyFile, readFile, readdir, rename, rm} from 'node:fs/promises';
 import path from 'node:path';
 import {Command} from 'commander';
 import {ProxyAgent, setGlobalDispatcher} from 'undici';
@@ -231,7 +231,8 @@ const renderSingleAvatar = async (
     pollIntervalMs: config.avatar.pollIntervalMs,
     timeoutMs: config.avatar.timeoutMs,
   });
-  await provider.render({audioPath, outputPath: paths.avatar, title: config.title});
+  await provider.render({audioPath, outputPath: paths.avatarRaw, title: config.title});
+  await ensureTransparentAvatar(paths.avatarRaw, paths.avatar);
   await patchCache(paths.cache, {avatar: key});
   console.log(`✓ heygen avatar -> ${path.relative(process.cwd(), paths.avatar)}`);
   return paths.avatar;
@@ -401,6 +402,34 @@ const run = (command: string, args: string[]) => new Promise<void>((resolve, rej
   child.on('exit', (code) => code === 0 ? resolve() : reject(new Error(`${command} exited with ${code}`)));
   child.on('error', reject);
 });
+
+const capture = (command: string, args: string[]) => new Promise<string>((resolve, reject) => {
+  const child = spawn(command, args, {shell: process.platform === 'win32'});
+  let stdout = '';
+  child.stdout.on('data', (chunk) => (stdout += chunk));
+  child.on('exit', (code) => code === 0 ? resolve(stdout) : reject(new Error(`${command} exited with ${code}`)));
+  child.on('error', reject);
+});
+
+const hasAlphaChannel = async (video: string) => {
+  try {
+    const out = await capture('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=pix_fmt', '-of', 'default=nw=1:nk=1', video]);
+    return out.trim().includes('yuva');
+  } catch {
+    return false;
+  }
+};
+
+// HeyGen instant avatars are trained without matting, so the API keeps the
+// recorded background. Matte the presenter locally into a real alpha webm.
+const ensureTransparentAvatar = async (raw: string, output: string) => {
+  if (await hasAlphaChannel(raw)) {
+    await rename(raw, output);
+    console.log('✓ avatar already has alpha channel');
+    return;
+  }
+  await run('python3', [path.resolve('scripts/matte_avatar.py'), raw, output]);
+};
 
 const render = async (projectName: string) => {
   const paths = await prepareRenderProps(projectName);

@@ -33,6 +33,7 @@ export const projectPaths = (projectName: string) => {
     avatarManifest: path.join(output, 'avatar-manifest.json'),
     avatarChapters: path.join(output, 'avatar-chapters'),
     audioChapters: path.join(output, 'audio-chapters'),
+    avatarRaw: path.join(output, 'avatar-raw.webm'),
     slides: path.join(output, 'slides'),
     props: path.join(output, 'render-props.json'),
     finalVideo: path.join(output, 'final.mp4'),
