@@ -162,6 +162,7 @@ const AvatarClip: React.FC<{
   if (layout === 'hidden') return null;
 
   const pip = layout === 'bottom-left' || layout === 'bottom-right';
+  const realHero = Boolean(avatarSrc) && !pip;
   const pipSize = getPipSize(width, height, scene.avatar?.scale ?? 0.28);
   const enter = spring({fps, frame:localFrame, config:{damping:18}});
 
@@ -188,13 +189,19 @@ const AvatarClip: React.FC<{
         marginLeft:-Math.round(metrics.hero.width / 2),
         borderRadius:`${metrics.hero.radius}px ${metrics.hero.radius}px 0 0`,
         overflow:'hidden',
-        background:'#071826',
-        boxShadow:'0 28px 90px rgba(0,0,0,.34)',
+        background:realHero ? 'transparent' : '#071826',
+        boxShadow:realHero ? 'none' : '0 28px 90px rgba(0,0,0,.34)',
       };
 
   const videoStyle: React.CSSProperties = pip
     ? {width:'100%', height:'100%', objectFit:'cover', objectPosition:'50% 32%', transform:'scale(1.22)', transformOrigin:'50% 34%'}
-    : {width:'100%', height:'100%', objectFit:'cover', objectPosition:'50% 0%'};
+    : {
+        width:'100%',
+        height:'100%',
+        objectFit:'cover',
+        objectPosition:'50% 0%',
+        mixBlendMode:'lighten',
+      };
 
   return (
     <div style={{...wrapper, opacity, transform:`scale(${interpolate(enter,[0,1],[0.975,1])})`, transformOrigin:pip ? 'center' : 'bottom center', display:'flex', alignItems:'center', justifyContent:'center', zIndex:20}}>
