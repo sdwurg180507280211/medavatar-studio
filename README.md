@@ -18,12 +18,14 @@ ElevenLabs / Mock TTS
    └── captions.json
    ↓
 HeyGen Digital Twin / Mock presenter
-   ├── single avatar.webm
-   └── optional chaptered avatar WebMs
+   ├── single full-frame avatar.webm
+   └── optional chaptered full-frame WebMs
    ↓
 PPTX → PDF → PNG + deterministic medical animations
    ↓
 Remotion
+   ├── fullscreen: show the complete avatar video
+   └── bottom-left/right: circular video viewport
    ↓
 final.mp4
 ```
@@ -37,7 +39,10 @@ final.mp4
 - karaoke-style active-character highlighting and keyword emphasis
 - subtitle visual presets: `medical`, `minimal`, `social`
 - scene boundaries preserve ElevenLabs paragraph pauses and initial lead-in
-- real HeyGen v3 asset upload → Digital Twin render → polling → transparent WebM download
+- real HeyGen v3 asset upload → Digital Twin render → polling → full-frame WebM download
+- HeyGen source video stays intact; no default MediaPipe matting or physical person crop
+- fullscreen scenes display the complete avatar video
+- `bottom-right` / `bottom-left` scenes show the same video through a circular Remotion viewport
 - safe default `single` avatar strategy
 - optional `chaptered` HeyGen strategy for longer videos
 - chapter planning prefers visual/PPT/animation boundaries to hide avatar resets
@@ -99,6 +104,8 @@ Supported directive fields:
 | `keywords` | `keywords=血管内皮,血压,压力` |
 | `duration` | optional estimate override, e.g. `duration=8` |
 
+For avatar presentation, `scale` controls the circular PiP diameter for `bottom-right` / `bottom-left`. The HeyGen video file itself is never physically cropped by this setting.
+
 `keywords` are reused by subtitle highlighting and, where applicable, the medical-animation scene.
 
 Subtitle presets are intentionally simple:
@@ -143,7 +150,28 @@ Use real providers through `project.json` or environment overrides:
 TTS_PROVIDER=elevenlabs AVATAR_PROVIDER=heygen pnpm medavatar build demo
 ```
 
-HeyGen uploads narration through `POST /v3/assets`, then creates an audio-driven avatar video through `POST /v3/videos`. The selected avatar must support matting for transparent WebM output.
+HeyGen uploads narration through `POST /v3/assets`, then creates an audio-driven avatar video through `POST /v3/videos`. MedAvatar keeps that full video frame intact. The avatar does **not** need to support transparent matting for the normal fullscreen + circular-PiP presentation.
+
+## Avatar presentation
+
+The same HeyGen source is reused for every visual layout:
+
+```text
+avatar.webm (full 16:9 source)
+        │
+        ├── doctor_full
+        │     └── fullscreen / complete frame
+        │
+        ├── doctor_ppt
+        │     └── circular PiP in bottom-right or bottom-left
+        │
+        └── medical_animation
+              └── circular PiP in bottom-right or bottom-left
+```
+
+`bottom-right` and `bottom-left` are display masks only. Remotion uses a circular container, `overflow: hidden`, and `object-fit: cover`; it does not rewrite or crop the underlying avatar file.
+
+The default PiP focus is centered slightly above the middle of the HeyGen frame so a talking doctor's upper body reads well in a circle. `scale=0.28` produces roughly a 360 px circle in a 1920×1080 composition.
 
 ## Avatar strategies
 
@@ -160,7 +188,9 @@ One continuous HeyGen avatar is created for the complete narration:
 }
 ```
 
-This minimizes HeyGen jobs and avoids unnecessary credit usage. Remotion changes the same avatar video's layout across scenes.
+This minimizes HeyGen jobs and avoids unnecessary credit usage. Remotion changes the same complete avatar video's presentation across scenes without changing the source asset.
+
+When migrating from the brief older local-matting implementation, MedAvatar will reuse an existing `avatar-raw.webm` as the new full-frame `avatar.webm` when possible instead of calling HeyGen again.
 
 ### Chaptered — optional for longer videos
 
@@ -193,7 +223,7 @@ Chapter mode:
 1. plans cuts on Scene boundaries;
 2. prefers PPT / medical-animation / hidden-or-PiP boundaries;
 3. splits the master narration with ffmpeg;
-4. renders one HeyGen WebM per chapter;
+4. renders one full-frame HeyGen WebM per chapter;
 5. caches completed chapters;
 6. writes `avatar-manifest.json`;
 7. places each chapter back on the global Remotion timeline while the original narration remains the only audio master;
