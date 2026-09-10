@@ -11,7 +11,14 @@ const run = (command: string, args: string[]) => new Promise<void>((resolve, rej
   child.on('error', reject);
 });
 
+const ensureCiCjkFonts = async () => {
+  if (process.env.CI !== 'true' || process.platform !== 'linux') return;
+  await run('sudo', ['apt-get', 'update', '-qq']);
+  await run('sudo', ['apt-get', 'install', '-y', '--no-install-recommends', 'fonts-noto-cjk']);
+};
+
 const main = async () => {
+  await ensureCiCjkFonts();
   const {paths, state, prototypeVisuals} = await prepareRenderProps(projectName);
   if (!prototypeVisuals) throw new Error('portrait-demo requires portrait.visuals.json');
   if (state.effective.video.width !== 1080 || state.effective.video.height !== 1920) {
