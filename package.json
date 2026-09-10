@@ -10,6 +10,9 @@
     "editor:demo": "tsx src/entry.ts editor demo",
     "studio": "remotion studio remotion/index.tsx",
     "render:demo": "tsx src/entry.ts render demo",
+    "portrait:voice": "tsx src/entry.ts voice portrait-demo",
+    "portrait:golden": "tsx src/entry.ts voice portrait-demo && tsx src/production/renderPortraitGolden.ts",
+    "portrait:demo": "tsx src/entry.ts voice portrait-demo && tsx src/entry.ts render portrait-demo",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

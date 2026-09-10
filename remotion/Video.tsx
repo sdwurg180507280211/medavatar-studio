@@ -13,6 +13,7 @@ import {
 } from 'remotion';
 import type {CaptionCue} from '../src/core/captions';
 import type {MedAvatarProject, Scene, SubtitleStyle} from '../src/core/schema';
+import type {PortraitPrototypeVisuals} from '../src/production/portraitPrototype';
 import {
   getCompositionLayout,
   getPipSize,
@@ -21,12 +22,20 @@ import {
   getVisualPanelRect,
 } from './layout';
 import {MedicalAnimationScene} from './medicalAnimations';
+import {PortraitPrototypeVisualRenderer} from './portraitTemplates';
 
 export type RenderAssets = {
   narration?: string;
   avatar?: string;
   avatarChapters?: Array<{src: string; start: number; end: number}>;
   slides: string[];
+};
+
+export type MedAvatarVideoProps = {
+  project: MedAvatarProject;
+  assets?: RenderAssets;
+  captions?: CaptionCue[];
+  prototypeVisuals?: PortraitPrototypeVisuals;
 };
 
 const palette = {
@@ -275,14 +284,22 @@ const Slide: React.FC<{scene: Scene; slideSrc?: string}> = ({scene, slideSrc}) =
   );
 };
 
-const SceneView: React.FC<{scene: Scene; slideSrc?: string}> = ({scene, slideSrc}) => (
-  <AbsoluteFill style={{background:`radial-gradient(circle at 50% 12%, #164765 0%, ${palette.background} 52%, #04101A 100%)`}}>
-    {scene.type === 'doctor_ppt' ? <Slide scene={scene} slideSrc={slideSrc} /> : null}
-    {scene.type === 'medical_animation' ? <MedicalAnimationScene scene={scene} /> : null}
-    {scene.type === 'visual_full' ? <Slide scene={scene} slideSrc={slideSrc} /> : null}
-    {scene.type === 'doctor_full' ? <HeroTitle scene={scene} /> : null}
-  </AbsoluteFill>
-);
+const SceneView: React.FC<{
+  scene: Scene;
+  slideSrc?: string;
+  prototypeVisuals?: PortraitPrototypeVisuals;
+}> = ({scene, slideSrc, prototypeVisuals}) => {
+  const prototypeVisual = prototypeVisuals?.scenes[scene.id];
+  return (
+    <AbsoluteFill style={{background:`radial-gradient(circle at 50% 12%, #164765 0%, ${palette.background} 52%, #04101A 100%)`}}>
+      {prototypeVisual ? <PortraitPrototypeVisualRenderer visual={prototypeVisual} /> : null}
+      {!prototypeVisual && scene.type === 'doctor_ppt' ? <Slide scene={scene} slideSrc={slideSrc} /> : null}
+      {!prototypeVisual && scene.type === 'medical_animation' ? <MedicalAnimationScene scene={scene} /> : null}
+      {!prototypeVisual && scene.type === 'visual_full' ? <Slide scene={scene} slideSrc={slideSrc} /> : null}
+      {!prototypeVisual && scene.type === 'doctor_full' ? <HeroTitle scene={scene} /> : null}
+    </AbsoluteFill>
+  );
+};
 
 const BottomFade: React.FC = () => {
   const {width, height} = useVideoConfig();
@@ -290,7 +307,12 @@ const BottomFade: React.FC = () => {
   return <div style={{position:'absolute', left:0, right:0, bottom:0, height:metrics.bottomFadeHeight, background:'linear-gradient(180deg, rgba(4,14,22,0) 0%, rgba(4,14,22,.72) 78%)', zIndex:25}} />;
 };
 
-export const MedAvatarVideo: React.FC<{project: MedAvatarProject; assets?: RenderAssets; captions?: CaptionCue[]}> = ({project, assets={slides:[]} as RenderAssets, captions=[]}) => {
+export const MedAvatarVideo: React.FC<MedAvatarVideoProps> = ({
+  project,
+  assets={slides:[]} as RenderAssets,
+  captions=[],
+  prototypeVisuals,
+}) => {
   let from = 0;
   return (
     <AbsoluteFill>
@@ -299,7 +321,11 @@ export const MedAvatarVideo: React.FC<{project: MedAvatarProject; assets?: Rende
         const start = from;
         from += duration;
         const slideSrc = scene.slide ? assets.slides[scene.slide-1] : undefined;
-        return <Sequence key={scene.id} from={start} durationInFrames={duration} premountFor={project.video.fps}><SceneView scene={scene} slideSrc={slideSrc} /></Sequence>;
+        return (
+          <Sequence key={scene.id} from={start} durationInFrames={duration} premountFor={project.video.fps}>
+            <SceneView scene={scene} slideSrc={slideSrc} prototypeVisuals={prototypeVisuals} />
+          </Sequence>
+        );
       })}
       <AvatarTrack project={project} assets={assets} />
       <BottomFade />

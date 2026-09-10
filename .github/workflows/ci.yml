@@ -11,6 +11,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
       - uses: pnpm/action-setup@v4
         with:
           version: 9.15.0
@@ -69,3 +71,49 @@ jobs:
           node -e "const p=require('/tmp/editor-saved.json'); const s=p.effective?.scenes?.find(x=>x.id==='vascular-injury'); if(s?.type!=='doctor_ppt'||s?.slide!==2||s?.animation?.name!=='risk-pathway'||s?.avatar?.layout!=='bottom-left'||s?.avatar?.scale!==0.34||p.overrides?.scenes?.['vascular-injury']?.subtitle?.style!=='minimal') process.exit(1)"
           node -e "const p=require('./projects/demo/storyboard.overrides.json'); const s=p.scenes?.['vascular-injury']; if(s?.type!=='doctor_ppt'||s?.slide!==2||s?.animation?.name!=='risk-pathway'||s?.avatar?.layout!=='bottom-left'||s?.avatar?.scale!==0.34||s?.subtitle?.style!=='minimal') process.exit(1)"
           cp /tmp/demo-overrides.json projects/demo/storyboard.overrides.json
+
+      - name: Detect portrait prototype changes
+        if: github.event_name == 'push'
+        id: portrait_changes
+        shell: bash
+        run: |
+          if git diff --name-only HEAD^ HEAD | grep -Eq '^(remotion/|projects/portrait-demo/|src/production/(portraitPrototype|renderPortraitGolden|renderProps)\.ts$|package\.json$)'; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Portrait prototype contract and layout invariants
+        if: github.event_name == 'push' && steps.portrait_changes.outputs.changed == 'true'
+        run: |
+          pnpm portrait:voice
+          pnpm exec tsx -e "import {readFile} from 'node:fs/promises'; import {prepareRenderProps} from './src/production/renderProps.ts'; const run=async()=>{const r=await prepareRenderProps('portrait-demo'); if(r.state.effective.video.width!==1080||r.state.effective.video.height!==1920||r.state.effective.scenes.length!==5||r.prototypeVisuals?.version!=='prototype-1'||r.prototypeVisuals?.scenes['silent-risk']?.template!=='emphasis-card'||r.prototypeVisuals?.scenes['cumulative-damage']?.support!=='血管损伤') process.exit(1); const scene=JSON.parse(await readFile(r.paths.scene,'utf8')); const props=JSON.parse(await readFile(r.paths.props,'utf8')); if(scene.prototypeVisuals!==undefined||scene.scenes?.some((s)=>s.visual!==undefined||s.prototypeVisuals!==undefined)||props.prototypeVisuals?.scenes?.['silent-risk']?.headline!=='没有症状') process.exit(1);}; run();"
+          pnpm exec tsx -e "import {getCompositionLayout,getPipSize,getSubtitlePlacement,getVisualPanelRect} from './remotion/layout.ts'; const cases=[[1920,1080],[1080,1920],[1280,720],[720,1280],[1440,1440]]; for(const [w,h] of cases){const l=getCompositionLayout(w,h); const rects=[getVisualPanelRect(w,h,'visual_full','hidden'),getVisualPanelRect(w,h,'medical_animation','bottom-right')]; for(const r of rects){if(r.left<0||r.top<0||r.width<=0||r.height<=0||r.left+r.width>w||r.top+r.height>h) process.exit(1);} if(l.hero.top<0||l.hero.width>w||l.hero.top+l.hero.height>h) process.exit(1); const pip=getPipSize(w,h,0.28); const sub=getSubtitlePlacement(w,h,'bottom-right',pip); if(sub.left<0||sub.right<0||sub.bottom<0||sub.left+sub.right>=w) process.exit(1); if(l.portrait&&sub.bottom<l.pip.margin+pip) process.exit(1); }"
+
+      - name: Portrait golden frames
+        if: github.event_name == 'push' && steps.portrait_changes.outputs.changed == 'true'
+        run: |
+          pnpm portrait:golden
+          node -e "const m=require('./projects/portrait-demo/output/golden/manifest.json'); if(m.width!==1080||m.height!==1920||m.frames?.length!==5) process.exit(1);"
+          test -s projects/portrait-demo/output/golden/01-intro.png
+          test -s projects/portrait-demo/output/golden/02-silent-risk.png
+          test -s projects/portrait-demo/output/golden/03-vascular-pressure.png
+          test -s projects/portrait-demo/output/golden/04-cumulative-damage.png
+          test -s projects/portrait-demo/output/golden/05-ending.png
+
+      - name: Portrait demo full render
+        if: github.event_name == 'push' && steps.portrait_changes.outputs.changed == 'true'
+        run: |
+          pnpm medavatar render portrait-demo
+          test -s projects/portrait-demo/output/final.mp4
+
+      - name: Upload portrait demo review artifact
+        if: github.event_name == 'push' && steps.portrait_changes.outputs.changed == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: portrait-demo-review
+          path: |
+            projects/portrait-demo/output/final.mp4
+            projects/portrait-demo/output/golden/*.png
+            projects/portrait-demo/output/golden/manifest.json
+          retention-days: 14
