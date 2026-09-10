@@ -1,5 +1,5 @@
 import type {StoryboardOverrides} from '../core/overrides.js';
-import type {Scene, SubtitleStyle} from '../core/schema.js';
+import type {Scene, SceneType, SubtitleStyle} from '../core/schema.js';
 
 type SceneOverride = NonNullable<StoryboardOverrides['scenes'][string]>;
 type AvatarLayout = NonNullable<Scene['avatar']>['layout'];
@@ -91,6 +91,50 @@ export const setSceneAvatarScale = (
   const sceneOverride: SceneOverride = {...existing};
   if (Object.keys(avatar).length === 0) delete sceneOverride.avatar;
   else sceneOverride.avatar = avatar;
+  writeSceneOverride(next, sceneId, sceneOverride);
+  return next;
+};
+
+export const setSceneType = (
+  overrides: StoryboardOverrides,
+  sceneId: string,
+  type: SceneType | undefined,
+): StoryboardOverrides => {
+  const next = structuredClone(overrides);
+  const existing: SceneOverride = next.scenes[sceneId] ?? {};
+
+  if (type) {
+    next.scenes[sceneId] = {...existing, type};
+    return next;
+  }
+
+  if (existing.type === undefined) return next;
+  const sceneOverride: SceneOverride = {...existing};
+  delete sceneOverride.type;
+  writeSceneOverride(next, sceneId, sceneOverride);
+  return next;
+};
+
+export const setSceneSlide = (
+  overrides: StoryboardOverrides,
+  sceneId: string,
+  slide: number | undefined,
+): StoryboardOverrides => {
+  if (slide !== undefined && (!Number.isInteger(slide) || slide <= 0)) {
+    throw new Error('slide must be a positive integer');
+  }
+
+  const next = structuredClone(overrides);
+  const existing: SceneOverride = next.scenes[sceneId] ?? {};
+
+  if (slide !== undefined) {
+    next.scenes[sceneId] = {...existing, slide};
+    return next;
+  }
+
+  if (existing.slide === undefined) return next;
+  const sceneOverride: SceneOverride = {...existing};
+  delete sceneOverride.slide;
   writeSceneOverride(next, sceneId, sceneOverride);
   return next;
 };

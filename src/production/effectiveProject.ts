@@ -39,6 +39,8 @@ const defaultLayoutForType = (type: SceneType) => {
 const defaultScaleForLayout = (layout: NonNullable<Scene['avatar']>['layout']) =>
   layout === 'hero' || layout === 'fullscreen' ? 1 : 0.28;
 
+const sceneUsesSlide = (type: SceneType) => type === 'doctor_ppt' || type === 'visual_full';
+
 export const resolveScenePresentation = (
   scene: Scene,
   options: {
@@ -46,6 +48,7 @@ export const resolveScenePresentation = (
     avatarLayoutChanged?: boolean;
     avatarLayoutOverridden?: boolean;
     avatarScaleOverridden?: boolean;
+    slideCleared?: boolean;
   } = {},
 ): Scene => {
   const fallbackLayout = defaultLayoutForType(scene.type);
@@ -68,8 +71,13 @@ export const resolveScenePresentation = (
     };
   }
 
+  const slide = sceneUsesSlide(scene.type) && scene.slide === undefined && !options.slideCleared
+    ? 1
+    : scene.slide;
+
   return sceneSchema.parse({
     ...scene,
+    slide,
     avatar: {layout, scale},
     animation,
   });
@@ -136,6 +144,7 @@ export const resolveStoryboardProject = (
       avatarLayoutChanged,
       avatarLayoutOverridden: override?.avatar?.layout !== undefined,
       avatarScaleOverridden: override?.avatar?.scale !== undefined,
+      slideCleared: override?.slide === null,
     });
   });
   return {
