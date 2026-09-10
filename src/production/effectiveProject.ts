@@ -43,6 +43,7 @@ export const resolveScenePresentation = (
   scene: Scene,
   options: {
     typeChanged?: boolean;
+    avatarLayoutChanged?: boolean;
     avatarLayoutOverridden?: boolean;
     avatarScaleOverridden?: boolean;
   } = {},
@@ -51,7 +52,11 @@ export const resolveScenePresentation = (
   const layout = options.typeChanged && !options.avatarLayoutOverridden
     ? fallbackLayout
     : scene.avatar?.layout ?? fallbackLayout;
-  const scale = options.typeChanged && !options.avatarScaleOverridden
+  const shouldDefaultScale = (
+    (options.typeChanged || options.avatarLayoutChanged)
+    && !options.avatarScaleOverridden
+  );
+  const scale = shouldDefaultScale
     ? defaultScaleForLayout(layout)
     : scene.avatar?.scale ?? defaultScaleForLayout(layout);
 
@@ -119,8 +124,16 @@ export const resolveStoryboardProject = (
     const baseScene = base.scenes[index];
     const override = parsedOverrides.scenes[scene.id];
     const typeChanged = Boolean(override?.type && override.type !== baseScene?.type);
+    const baseLayout = baseScene?.avatar?.layout ?? defaultLayoutForType(baseScene?.type ?? scene.type);
+    const overrideLayout = override?.avatar?.layout;
+    const avatarLayoutChanged = Boolean(
+      overrideLayout !== undefined
+      && overrideLayout !== baseLayout
+      && defaultScaleForLayout(overrideLayout) !== defaultScaleForLayout(baseLayout),
+    );
     return resolveScenePresentation(scene, {
       typeChanged,
+      avatarLayoutChanged,
       avatarLayoutOverridden: override?.avatar?.layout !== undefined,
       avatarScaleOverridden: override?.avatar?.scale !== undefined,
     });

@@ -3,10 +3,21 @@ import {Player, type PlayerRef} from '@remotion/player';
 import {MedAvatarVideo} from '../../remotion/Video';
 import type {StoryboardOverrides} from '../../src/core/overrides';
 import type {Scene, SubtitleStyle} from '../../src/core/schema';
-import {setSceneSubtitleStyle} from '../../src/editor/overrideDraft';
+import {
+  setSceneAvatarLayout,
+  setSceneAvatarScale,
+  setSceneSubtitleStyle,
+} from '../../src/editor/overrideDraft';
 import type {EditorProjectPayload} from '../../src/production/renderProps';
 
 const SUBTITLE_STYLES: SubtitleStyle[] = ['medical', 'minimal', 'social'];
+type AvatarLayout = NonNullable<Scene['avatar']>['layout'];
+const AVATAR_LAYOUTS: Array<{value: AvatarLayout; label: string}> = [
+  {value: 'hero', label: 'Hero'},
+  {value: 'bottom-left', label: 'Bottom Left'},
+  {value: 'bottom-right', label: 'Bottom Right'},
+  {value: 'hidden', label: 'Hidden'},
+];
 
 const formatTime = (seconds: number) => {
   const minutes = Math.floor(seconds / 60);
@@ -27,6 +38,18 @@ const Field: React.FC<{label: string; value: React.ReactNode; muted?: boolean}> 
   <div className="field">
     <div className="field-label">{label}</div>
     <div className={muted ? 'field-value muted' : 'field-value'}>{value}</div>
+  </div>
+);
+
+const Provenance: React.FC<{
+  base: React.ReactNode;
+  override: React.ReactNode;
+  effective: React.ReactNode;
+}> = ({base, override, effective}) => (
+  <div className="value-provenance">
+    <span><b>Base</b>{base ?? '—'}</span>
+    <span><b>Override</b>{override ?? '—'}</span>
+    <span><b>Effective</b>{effective ?? '—'}</span>
   </div>
 );
 
@@ -137,6 +160,9 @@ export const App: React.FC = () => {
     0,
   ));
   const portrait = payload.effective.video.height > payload.effective.video.width;
+  const avatarLayout = selected?.avatar?.layout;
+  const avatarScale = selected?.avatar?.scale ?? 0.28;
+  const pipScaleEditable = avatarLayout === 'bottom-left' || avatarLayout === 'bottom-right';
 
   const selectScene = (scene: Scene) => {
     setSelectedSceneId(scene.id);
@@ -151,6 +177,26 @@ export const App: React.FC = () => {
   const resetSubtitleStyle = () => {
     if (!selected) return;
     void resolveDraft(setSceneSubtitleStyle(draftOverrides, selected.id, undefined));
+  };
+
+  const changeAvatarLayout = (layout: AvatarLayout) => {
+    if (!selected) return;
+    void resolveDraft(setSceneAvatarLayout(draftOverrides, selected.id, layout));
+  };
+
+  const resetAvatarLayout = () => {
+    if (!selected) return;
+    void resolveDraft(setSceneAvatarLayout(draftOverrides, selected.id, undefined));
+  };
+
+  const changeAvatarScale = (scale: number) => {
+    if (!selected) return;
+    void resolveDraft(setSceneAvatarScale(draftOverrides, selected.id, scale));
+  };
+
+  const resetAvatarScale = () => {
+    if (!selected) return;
+    void resolveDraft(setSceneAvatarScale(draftOverrides, selected.id, undefined));
   };
 
   return (
@@ -230,7 +276,78 @@ export const App: React.FC = () => {
               <Field label="Type" value={selected.type} />
               <Field label="Title" value={selected.title ?? '—'} />
               <Field label="Slide" value={selected.slide ?? '—'} />
-              <Field label="Avatar" value={`${selected.avatar?.layout ?? '—'} · ${selected.avatar?.scale ?? '—'}`} />
+
+              <section className="edit-section">
+                <div className="edit-section-heading">
+                  <div>
+                    <div className="edit-title">Avatar Layout</div>
+                    <div className="edit-hint">Presentation-only override · source HeyGen video is unchanged</div>
+                  </div>
+                  <button
+                    type="button"
+                    className="reset-button"
+                    disabled={override?.avatar?.layout === undefined || resolving}
+                    onClick={resetAvatarLayout}
+                  >
+                    Reset
+                  </button>
+                </div>
+                <div className="segmented-control avatar-layout-control">
+                  {AVATAR_LAYOUTS.map(({value, label}) => (
+                    <button
+                      type="button"
+                      key={value}
+                      disabled={resolving}
+                      className={avatarLayout === value ? 'active' : ''}
+                      onClick={() => changeAvatarLayout(value)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <Provenance
+                  base={base?.avatar?.layout}
+                  override={override?.avatar?.layout}
+                  effective={selected.avatar?.layout}
+                />
+
+                <div className="scale-editor">
+                  <div className="scale-heading">
+                    <div>
+                      <div className="scale-label">PiP Scale</div>
+                      <div className="edit-hint">Used by bottom-left / bottom-right layouts</div>
+                    </div>
+                    <div className="scale-actions">
+                      <span className={pipScaleEditable ? 'scale-value' : 'scale-value muted'}>
+                        {avatarScale.toFixed(2)}
+                      </span>
+                      <button
+                        type="button"
+                        className="reset-button"
+                        disabled={override?.avatar?.scale === undefined || resolving}
+                        onClick={resetAvatarScale}
+                      >
+                        Reset
+                      </button>
+                    </div>
+                  </div>
+                  <input
+                    className="scale-slider"
+                    type="range"
+                    min="0.18"
+                    max="0.50"
+                    step="0.01"
+                    value={Math.min(0.5, Math.max(0.18, avatarScale))}
+                    disabled={!pipScaleEditable || saving}
+                    onChange={(event) => changeAvatarScale(Number(event.currentTarget.value))}
+                  />
+                  <Provenance
+                    base={base?.avatar?.scale?.toFixed(2)}
+                    override={override?.avatar?.scale?.toFixed(2)}
+                    effective={selected.avatar?.scale?.toFixed(2)}
+                  />
+                </div>
+              </section>
 
               <section className="edit-section">
                 <div className="edit-section-heading">
@@ -260,13 +377,14 @@ export const App: React.FC = () => {
                     </button>
                   ))}
                 </div>
-                <div className="value-provenance">
-                  <span><b>Base</b>{base?.subtitle?.style ?? '—'}</span>
-                  <span><b>Override</b>{override?.subtitle?.style ?? '—'}</span>
-                  <span><b>Effective</b>{selected.subtitle?.style ?? '—'}</span>
-                </div>
+                <Provenance
+                  base={base?.subtitle?.style}
+                  override={override?.subtitle?.style}
+                  effective={selected.subtitle?.style}
+                />
               </section>
 
+              <Field label="Avatar" value={`${selected.avatar?.layout ?? '—'} · ${selected.avatar?.scale ?? '—'}`} />
               <Field label="Subtitle" value={`${selected.subtitle?.mode ?? '—'} · ${selected.subtitle?.style ?? '—'}`} />
               <Field label="Animation" value={selected.animation?.name ?? '—'} />
 
