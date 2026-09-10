@@ -13,6 +13,9 @@
     "portrait:voice": "tsx src/entry.ts voice portrait-demo",
     "portrait:golden": "tsx src/entry.ts voice portrait-demo && tsx src/production/renderPortraitGolden.ts",
     "portrait:demo": "tsx src/entry.ts voice portrait-demo && tsx src/entry.ts render portrait-demo",
+    "portrait:still": "tsx src/production/portraitIteration.ts still",
+    "portrait:preview": "tsx src/production/portraitIteration.ts preview",
+    "portrait:render": "tsx src/production/portraitIteration.ts render",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
