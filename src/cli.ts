@@ -1,6 +1,5 @@
 import 'dotenv/config';
-import {spawn} from 'node:child_process';
-import {copyFile, readFile, readdir, rm} from 'node:fs/promises';
+import {readFile, readdir, rm} from 'node:fs/promises';
 import path from 'node:path';
 import {Command} from 'commander';
 import {ProxyAgent, setGlobalDispatcher} from 'undici';
@@ -8,7 +7,7 @@ import {ProxyAgent, setGlobalDispatcher} from 'undici';
 const proxyUrl = process.env.https_proxy ?? process.env.HTTPS_PROXY ?? process.env.http_proxy ?? process.env.HTTP_PROXY;
 if (proxyUrl) setGlobalDispatcher(new ProxyAgent(proxyUrl));
 import {splitAudioIntoChapters} from './audioChapters.js';
-import {captionCuesFromAlignment, captionCuesFromSceneDurations, type CaptionCue} from './core/captions.js';
+import {captionCuesFromAlignment, captionCuesFromSceneDurations} from './core/captions.js';
 import {planAvatarChapters, type AvatarChapterManifest, type AvatarChapterManifestEntry, type AvatarChapterPlan} from './core/chapters.js';
 import {projectConfigSchema, type ProjectConfig} from './core/config.js';
 import {ensureDir, fileExists, projectPaths, readText, sha256, writeJson} from './core/io.js';
@@ -20,21 +19,16 @@ import {ElevenLabsTtsProvider} from './providers/elevenlabs.js';
 import {HeyGenAvatarProvider, HEYGEN_AVATAR_ASPECT_RATIO} from './providers/heygen.js';
 import {MockTtsProvider} from './providers/mock.js';
 import type {CharacterAlignment, TimingSegment, TtsProvider} from './providers/types.js';
+import {renderProject} from './production/renderCommand.js';
 import {scriptToStoryboard} from './storyboard.js';
 
 const program = new Command();
-program.name('medavatar').description('MedAvatar Studio CLI').version('0.4.0');
+program.name('medavatar').description('MedAvatar Studio CLI').version('0.4.1');
 
 const AVATAR_PRESENTATION_CACHE_VERSION = 'portrait-source-v1';
 
 type CacheFile = Record<string, string | undefined>;
 type AvatarStrategy = 'single' | 'chaptered';
-
-type StagedAvatarChapter = {
-  src: string;
-  start: number;
-  end: number;
-};
 
 const loadConfig = async (projectName: string) => {
   const paths = projectPaths(projectName);
@@ -217,7 +211,9 @@ const manifestIsComplete = async (
     );
   });
   if (!samePlan) return false;
-  const checks = await Promise.all(manifest.chapters.map((chapter) => fileExists(path.join(paths.avatarChapters, chapter.videoFile))));
+  const checks = await Promise.all(
+    manifest.chapters.map((chapter) => fileExists(path.join(paths.avatarChapters, chapter.videoFile))),
+  );
   return checks.every(Boolean);
 };
 
@@ -295,7 +291,9 @@ const renderChapteredAvatar = async (
     ]));
     const videoFile = `${chapter.id}.webm`;
     const videoPath = path.join(paths.avatarChapters, videoFile);
-    const reusable = previous.find((entry) => entry.id === chapter.id && entry.hash === hash && entry.videoFile === videoFile);
+    const reusable = previous.find(
+      (entry) => entry.id === chapter.id && entry.hash === hash && entry.videoFile === videoFile,
+    );
     if (reusable && await fileExists(videoPath)) {
       completed.push({...chapter, hash, videoFile});
       console.log(`✓ ${chapter.id} avatar cache hit`);
@@ -308,12 +306,17 @@ const renderChapteredAvatar = async (
       completed.push({...chapter, hash, videoFile});
       console.log(`✓ ${chapter.id} heygen ${HEYGEN_AVATAR_ASPECT_RATIO} portrait avatar`);
     }
-    await writeJson(paths.avatarManifest, {strategy: 'chaptered', chapters: completed} satisfies AvatarChapterManifest);
+    await writeJson(
+      paths.avatarManifest,
+      {strategy: 'chaptered', chapters: completed} satisfies AvatarChapterManifest,
+    );
   }
 
   const keep = new Set(completed.map((entry) => entry.videoFile));
   for (const file of await readdir(paths.avatarChapters)) {
-    if (file.endsWith('.webm') && !keep.has(file)) await rm(path.join(paths.avatarChapters, file), {force: true});
+    if (file.endsWith('.webm') && !keep.has(file)) {
+      await rm(path.join(paths.avatarChapters, file), {force: true});
+    }
   }
   await patchCache(paths.cache, {avatar: globalKey});
   console.log(`✓ chaptered heygen avatar -> ${completed.length} portrait chapters`);
@@ -323,7 +326,11 @@ const renderChapteredAvatar = async (
 const avatar = async (projectName: string) => {
   const {paths, config} = await loadConfig(projectName);
   const name = envProvider('AVATAR_PROVIDER', config.avatar.provider, ['mock', 'heygen'] as const);
-  const strategy = envProvider<AvatarStrategy>('AVATAR_STRATEGY', config.avatar.strategy, ['single', 'chaptered'] as const);
+  const strategy = envProvider<AvatarStrategy>(
+    'AVATAR_STRATEGY',
+    config.avatar.strategy,
+    ['single', 'chaptered'] as const,
+  );
   if (name === 'mock') {
     await rm(paths.avatar, {force: true});
     await rm(path.join(paths.output, 'avatar-raw.webm'), {force: true});
@@ -364,70 +371,6 @@ const slides = async (projectName: string) => {
   return images;
 };
 
-const stageAssets = async (projectName: string) => {
-  const paths = projectPaths(projectName);
-  await rm(paths.publicGenerated, {recursive: true, force: true});
-  await ensureDir(paths.publicGenerated);
-  const assets: {narration?: string; avatar?: string; avatarChapters?: StagedAvatarChapter[]; slides: string[]} = {slides: []};
-  const narrationCandidates = [paths.narrationMp3, paths.narrationWav];
-  for (const source of narrationCandidates) {
-    if (await fileExists(source)) {
-      const name = path.basename(source);
-      await copyFile(source, path.join(paths.publicGenerated, name));
-      assets.narration = path.posix.join('generated', projectName, name);
-      break;
-    }
-  }
-
-  const manifest = await readAvatarManifest(paths.avatarManifest);
-  if (manifest && await manifestIsComplete(manifest, paths)) {
-    assets.avatarChapters = [];
-    for (const chapter of manifest.chapters) {
-      await copyFile(path.join(paths.avatarChapters, chapter.videoFile), path.join(paths.publicGenerated, chapter.videoFile));
-      assets.avatarChapters.push({
-        src: path.posix.join('generated', projectName, chapter.videoFile),
-        start: chapter.start,
-        end: chapter.end,
-      });
-    }
-  } else if (await fileExists(paths.avatar)) {
-    await copyFile(paths.avatar, path.join(paths.publicGenerated, 'avatar.webm'));
-    assets.avatar = path.posix.join('generated', projectName, 'avatar.webm');
-  }
-
-  if (await fileExists(paths.slides)) {
-    const files = (await readdir(paths.slides)).filter((file) => file.endsWith('.png')).sort();
-    for (const file of files) {
-      await copyFile(path.join(paths.slides, file), path.join(paths.publicGenerated, file));
-      assets.slides.push(path.posix.join('generated', projectName, file));
-    }
-  }
-  return assets;
-};
-
-const prepareRenderProps = async (projectName: string) => {
-  const paths = projectPaths(projectName);
-  const project = projectSchema.parse(JSON.parse(await readText(paths.scene)));
-  const assets = await stageAssets(projectName);
-  const captions: CaptionCue[] = await fileExists(paths.captions)
-    ? JSON.parse(await readText(paths.captions)) as CaptionCue[]
-    : captionCuesFromSceneDurations(project.scenes);
-  await writeJson(paths.props, {project, assets, captions});
-  return paths;
-};
-
-const run = (command: string, args: string[]) => new Promise<void>((resolve, reject) => {
-  const child = spawn(command, args, {stdio: 'inherit', shell: process.platform === 'win32'});
-  child.on('exit', (code) => code === 0 ? resolve() : reject(new Error(`${command} exited with ${code}`)));
-  child.on('error', reject);
-});
-
-const render = async (projectName: string) => {
-  const paths = await prepareRenderProps(projectName);
-  await run('pnpm', ['exec', 'remotion', 'render', 'remotion/index.tsx', 'MedAvatarVideo', paths.finalVideo, `--props=${paths.props}`]);
-  console.log(`✓ video -> ${path.relative(process.cwd(), paths.finalVideo)}`);
-};
-
 const chapters = async (projectName: string) => {
   const {paths, config} = await loadConfig(projectName);
   const project = await fileExists(paths.scene)
@@ -446,7 +389,7 @@ const build = async (projectName: string) => {
   await voice(projectName);
   await avatar(projectName);
   await slides(projectName);
-  await render(projectName);
+  await renderProject(projectName);
 };
 
 program.command('storyboard <project>').action(async (project) => { await storyboard(project); });
@@ -454,7 +397,10 @@ program.command('voice <project>').action(async (project) => { await storyboard(
 program.command('chapters <project>').action(async (project) => { await chapters(project); });
 program.command('avatar <project>').action(async (project) => { await storyboard(project); await voice(project); await avatar(project); });
 program.command('slides <project>').action(async (project) => { await slides(project); });
-program.command('render <project>').action(async (project) => { if (!(await fileExists(projectPaths(project).scene))) await storyboard(project); await render(project); });
+program.command('render <project>').action(async (project) => {
+  if (!(await fileExists(projectPaths(project).scene))) await storyboard(project);
+  await renderProject(project);
+});
 program.command('build <project>').action(build);
 
 await program.parseAsync(process.argv);
