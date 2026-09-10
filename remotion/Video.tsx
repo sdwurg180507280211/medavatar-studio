@@ -18,6 +18,7 @@ import {MedicalAnimationScene} from './medicalAnimations';
 export type RenderAssets = {
   narration?: string;
   avatar?: string;
+  avatarOrientation?: 'portrait' | 'landscape';
   avatarChapters?: Array<{src: string; start: number; end: number}>;
   slides: string[];
 };
@@ -117,9 +118,10 @@ const AvatarClip: React.FC<{
   avatarSrc?: string;
   globalStartFrame?: number;
   opacity?: number;
-}> = ({project, avatarSrc, globalStartFrame = 0, opacity = 1}) => {
+  orientation?: 'portrait' | 'landscape';
+}> = ({project, avatarSrc, globalStartFrame = 0, opacity = 1, orientation = 'landscape'}) => {
   const clipFrame = useCurrentFrame();
-  const {fps} = useVideoConfig();
+  const {fps, height} = useVideoConfig();
   const globalFrame = clipFrame + globalStartFrame;
   const {scene, localFrame} = activeScene(project, globalFrame);
   const layout = scene.avatar?.layout ?? (scene.type === 'doctor_full' ? 'fullscreen' : 'bottom-right');
@@ -128,6 +130,12 @@ const AvatarClip: React.FC<{
   const pip = layout !== 'fullscreen';
   const pipSize = pipSizeForScene(scene);
   const enter = spring({fps, frame: localFrame, config:{damping:18}});
+  // Portrait avatar footage anchors full-height on the right of the 16:9 canvas:
+  // 9:16 clips fill their column exactly, while the left keeps the branded
+  // background and headline card. Landscape footage keeps the full-bleed view.
+  const fullscreenWrapper: React.CSSProperties = orientation === 'portrait'
+    ? {position:'absolute', top:0, bottom:0, right:0, width: Math.round((height * 9) / 16)}
+    : {position:'absolute', inset:0};
   const wrapper: React.CSSProperties = pip
     ? {
         position:'absolute',
@@ -142,7 +150,7 @@ const AvatarClip: React.FC<{
         boxShadow:'0 18px 54px rgba(0,0,0,.38)',
         background:'#071826',
       }
-    : {position:'absolute', inset:0};
+    : fullscreenWrapper;
 
   const videoStyle: React.CSSProperties = pip
     ? {
@@ -156,8 +164,8 @@ const AvatarClip: React.FC<{
     : {
         width:'100%',
         height:'100%',
-        objectFit:'contain',
-        objectPosition:'50% 50%',
+        objectFit:'cover',
+        objectPosition: orientation === 'portrait' ? '50% 0%' : '50% 50%',
       };
 
   return (
@@ -176,7 +184,8 @@ const ChapterAvatarClip: React.FC<{
   durationInFrames: number;
   fadeIn: boolean;
   fadeOut: boolean;
-}> = ({project, avatarSrc, globalStartFrame, durationInFrames, fadeIn, fadeOut}) => {
+  orientation?: 'portrait' | 'landscape';
+}> = ({project, avatarSrc, globalStartFrame, durationInFrames, fadeIn, fadeOut, orientation}) => {
   const frame = useCurrentFrame();
   const {fps} = useVideoConfig();
   const fadeFrames = Math.max(2, Math.min(Math.round(fps * 0.2), Math.floor(durationInFrames / 3)));
@@ -187,7 +196,7 @@ const ChapterAvatarClip: React.FC<{
   if (fadeOut) {
     opacity *= interpolate(frame, [Math.max(0, durationInFrames - fadeFrames - 1), Math.max(1, durationInFrames - 1)], [1, 0], {extrapolateLeft:'clamp', extrapolateRight:'clamp'});
   }
-  return <AvatarClip project={project} avatarSrc={avatarSrc} globalStartFrame={globalStartFrame} opacity={opacity} />;
+  return <AvatarClip project={project} avatarSrc={avatarSrc} globalStartFrame={globalStartFrame} opacity={opacity} orientation={orientation} />;
 };
 
 const AvatarTrack: React.FC<{project: MedAvatarProject; assets: RenderAssets}> = ({project, assets}) => {
@@ -210,6 +219,7 @@ const AvatarTrack: React.FC<{project: MedAvatarProject; assets: RenderAssets}> =
                 durationInFrames={duration}
                 fadeIn={fadeIn}
                 fadeOut={fadeOut}
+                orientation={assets.avatarOrientation}
               />
             </Sequence>
           );
@@ -217,7 +227,7 @@ const AvatarTrack: React.FC<{project: MedAvatarProject; assets: RenderAssets}> =
       </>
     );
   }
-  return <AvatarClip project={project} avatarSrc={assets.avatar} />;
+  return <AvatarClip project={project} avatarSrc={assets.avatar} orientation={assets.avatarOrientation} />;
 };
 
 const SubtitleTrack: React.FC<{project: MedAvatarProject; captions: CaptionCue[]}> = ({project, captions}) => {

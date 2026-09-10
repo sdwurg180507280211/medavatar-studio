@@ -59,7 +59,7 @@ export class HeyGenAvatarProvider implements AvatarProvider {
         avatar_id: this.avatarId,
         title,
         resolution: this.options.resolution ?? '1080p',
-        aspect_ratio: '16:9',
+        aspect_ratio: '9:16',
         output_format: 'webm',
         audio_asset_id: audioAssetId,
       }),

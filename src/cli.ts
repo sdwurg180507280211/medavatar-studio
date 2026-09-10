@@ -364,11 +364,26 @@ const slides = async (projectName: string) => {
   return images;
 };
 
+// Portrait avatar footage renders as a right-anchored full-height column on
+// the 16:9 canvas; landscape footage keeps the full-bleed fullscreen view.
+const avatarOrientationOf = async (video: string): Promise<'portrait' | 'landscape' | undefined> => {
+  const probe = await new Promise<string>((resolve) => {
+    const child = spawn('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height', '-of', 'csv=p=0', video]);
+    let out = '';
+    child.stdout.on('data', (chunk) => (out += chunk));
+    child.on('error', () => resolve(''));
+    child.on('exit', () => resolve(out.trim()));
+  });
+  const [width, height] = probe.split(',').map((value) => Number(value));
+  if (!width || !height) return undefined;
+  return height > width ? 'portrait' : 'landscape';
+};
+
 const stageAssets = async (projectName: string) => {
   const paths = projectPaths(projectName);
   await rm(paths.publicGenerated, {recursive: true, force: true});
   await ensureDir(paths.publicGenerated);
-  const assets: {narration?: string; avatar?: string; avatarChapters?: StagedAvatarChapter[]; slides: string[]} = {slides: []};
+  const assets: {narration?: string; avatar?: string; avatarOrientation?: 'portrait' | 'landscape'; avatarChapters?: StagedAvatarChapter[]; slides: string[]} = {slides: []};
   const narrationCandidates = [paths.narrationMp3, paths.narrationWav];
   for (const source of narrationCandidates) {
     if (await fileExists(source)) {
@@ -390,9 +405,13 @@ const stageAssets = async (projectName: string) => {
         end: chapter.end,
       });
     }
+    assets.avatarOrientation = await avatarOrientationOf(
+      path.join(paths.publicGenerated, manifest.chapters[0].videoFile),
+    );
   } else if (await fileExists(paths.avatar)) {
     await copyFile(paths.avatar, path.join(paths.publicGenerated, 'avatar.webm'));
     assets.avatar = path.posix.join('generated', projectName, 'avatar.webm');
+    assets.avatarOrientation = await avatarOrientationOf(path.join(paths.publicGenerated, 'avatar.webm'));
   }
 
   if (await fileExists(paths.slides)) {
