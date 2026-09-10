@@ -138,3 +138,37 @@ export const setSceneSlide = (
   writeSceneOverride(next, sceneId, sceneOverride);
   return next;
 };
+
+export const setSceneAnimationName = (
+  overrides: StoryboardOverrides,
+  sceneId: string,
+  name: string | undefined,
+): StoryboardOverrides => {
+  if (name !== undefined && name.trim().length === 0) {
+    throw new Error('animation name must not be empty');
+  }
+
+  const next = structuredClone(overrides);
+  const existing: SceneOverride = next.scenes[sceneId] ?? {};
+
+  if (name !== undefined) {
+    const animation = existing.animation && typeof existing.animation === 'object'
+      ? {...existing.animation, name}
+      : {name};
+    next.scenes[sceneId] = {...existing, animation};
+    return next;
+  }
+
+  if (existing.animation === undefined) return next;
+  const sceneOverride: SceneOverride = {...existing};
+  if (existing.animation === null) {
+    delete sceneOverride.animation;
+  } else {
+    const animation = {...existing.animation};
+    delete animation.name;
+    if (Object.keys(animation).length === 0) delete sceneOverride.animation;
+    else sceneOverride.animation = animation;
+  }
+  writeSceneOverride(next, sceneId, sceneOverride);
+  return next;
+};

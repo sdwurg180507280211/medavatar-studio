@@ -4,6 +4,7 @@ import {MedAvatarVideo} from '../../remotion/Video';
 import type {StoryboardOverrides} from '../../src/core/overrides';
 import type {Scene, SceneType, SubtitleStyle} from '../../src/core/schema';
 import {
+  setSceneAnimationName,
   setSceneAvatarLayout,
   setSceneAvatarScale,
   setSceneSlide,
@@ -26,6 +27,12 @@ const SCENE_TYPES: Array<{value: SceneType; label: string; short: string}> = [
   {value: 'medical_animation', label: 'Medical Animation', short: 'Animation'},
   {value: 'visual_full', label: 'Visual Only', short: 'Visual'},
 ];
+const ANIMATION_PRESETS = [
+  {value: 'artery-pressure', label: 'Artery Pressure', description: 'Sustained pressure on vessel walls'},
+  {value: 'plaque-growth', label: 'Plaque Growth', description: 'Endothelial injury to narrowing'},
+  {value: 'heart-beat', label: 'Heart Beat', description: 'Cardiac workload and heartbeat'},
+  {value: 'risk-pathway', label: 'Risk Pathway', description: 'Hypertension to target-organ risk'},
+] as const;
 
 const formatTime = (seconds: number) => {
   const minutes = Math.floor(seconds / 60);
@@ -173,6 +180,7 @@ export const App: React.FC = () => {
   const avatarScale = selected?.avatar?.scale ?? 0.28;
   const pipScaleEditable = avatarLayout === 'bottom-left' || avatarLayout === 'bottom-right';
   const slideBacked = selected?.type === 'doctor_ppt' || selected?.type === 'visual_full';
+  const animationBacked = selected?.type === 'medical_animation';
 
   const selectScene = (scene: Scene) => {
     setSelectedSceneId(scene.id);
@@ -194,6 +202,14 @@ export const App: React.FC = () => {
   const resetSlide = () => {
     if (!selected) return;
     void resolveDraft(setSceneSlide(draftOverrides, selected.id, undefined));
+  };
+  const changeAnimation = (name: string) => {
+    if (!selected) return;
+    void resolveDraft(setSceneAnimationName(draftOverrides, selected.id, name));
+  };
+  const resetAnimation = () => {
+    if (!selected) return;
+    void resolveDraft(setSceneAnimationName(draftOverrides, selected.id, undefined));
   };
   const changeSubtitleStyle = (style: SubtitleStyle) => {
     if (!selected) return;
@@ -330,6 +346,38 @@ export const App: React.FC = () => {
                   <div className="empty-slides">No rendered slide PNGs. Run <code>pnpm medavatar slides {projectName}</code>.</div>
                 )}
                 <Provenance base={base?.slide} override={override?.slide} effective={selected.slide} />
+              </section>
+
+              <section className={animationBacked ? 'edit-section' : 'edit-section inactive-section'}>
+                <div className="edit-section-heading">
+                  <div>
+                    <div className="edit-title">Visual Source · Medical Animation</div>
+                    <div className="edit-hint">Rendered by Medical Animation; selection stays stored when dormant</div>
+                  </div>
+                  <button type="button" className="reset-button" disabled={override?.animation === undefined || resolving} onClick={resetAnimation}>Reset</button>
+                </div>
+                <div className="segmented-control avatar-layout-control">
+                  {ANIMATION_PRESETS.map(({value, label}) => (
+                    <button
+                      type="button"
+                      key={value}
+                      disabled={resolving}
+                      className={selected.animation?.name === value ? 'active' : ''}
+                      onClick={() => changeAnimation(value)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <div className="edit-hint">
+                  {ANIMATION_PRESETS.find((preset) => preset.value === selected.animation?.name)?.description
+                    ?? (selected.animation?.name ? `Custom animation: ${selected.animation.name}` : 'No animation selected')}
+                </div>
+                <Provenance
+                  base={base?.animation?.name}
+                  override={override?.animation?.name}
+                  effective={selected.animation?.name}
+                />
               </section>
 
               <section className="edit-section">
