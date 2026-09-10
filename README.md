@@ -36,7 +36,7 @@ final.mp4
 
 ## Core presentation model
 
-The Digital Twin base is portrait, so MedAvatar treats **9:16 as the source format**, not as an error that needs landscape compensation. HeyGen always renders portrait footage. Remotion then decides how that source appears in the 16:9 final composition.
+The Digital Twin base is portrait, so MedAvatar treats **9:16 as the source and default output format**. HeyGen always renders portrait footage, and Remotion composes the final video on the same 1080×1920 canvas. A landscape project remains possible by setting explicit `video.width` and `video.height` values in `project.json`.
 
 There is no default transparent-background or person-matting step. For PPT and medical-animation scenes, the original portrait video is displayed through a circular Remotion mask using `overflow: hidden` and `object-fit: cover`.
 
@@ -66,7 +66,7 @@ For a doctor-led scene, the portrait video becomes the main `hero` visual. The s
 - per-stage and per-chapter cache keys
 - PPTX → PDF → PNG through LibreOffice + Poppler
 - deterministic medical animation components
-- 1920×1080 / 25fps demo
+- 1080×1920 / 25fps demo
 - CI typecheck + free Mock storyboard/voice/timing/caption/chapter smoke test
 
 ## Quick start

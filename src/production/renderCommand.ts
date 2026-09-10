@@ -10,6 +10,8 @@ const run = (command: string, args: string[]) => new Promise<void>((resolve, rej
 
 export const renderProject = async (projectName: string) => {
   const {paths, state} = await prepareRenderProps(projectName);
+  const defaultConcurrency = state.effective.video.height > state.effective.video.width ? '2' : undefined;
+  const concurrency = process.env.REMOTION_CONCURRENCY ?? defaultConcurrency;
   if (state.timeline.stale) {
     console.warn('• narration timing is stale; rendering uses estimated scene timing and omits stale narration/avatar media');
   } else if (state.timeline.source === 'estimated') {
@@ -23,6 +25,7 @@ export const renderProject = async (projectName: string) => {
     'MedAvatarVideo',
     paths.finalVideo,
     `--props=${paths.props}`,
+    ...(concurrency ? [`--concurrency=${concurrency}`] : []),
   ]);
   console.log(`✓ video -> ${path.relative(process.cwd(), paths.finalVideo)}`);
 };

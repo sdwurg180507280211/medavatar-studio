@@ -182,7 +182,7 @@ export const scriptToStoryboard = (
   return {
     version: '1.0',
     title,
-    video: {width: 1920, height: 1080, fps: 25},
+    video: {width: 1080, height: 1920, fps: 25},
     scenes,
   };
 };

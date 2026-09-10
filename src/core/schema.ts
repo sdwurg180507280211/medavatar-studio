@@ -48,8 +48,8 @@ export const projectSchema = z.object({
   version: z.literal('1.0'),
   title: z.string(),
   video: z.object({
-    width: z.number().int().positive().default(1920),
-    height: z.number().int().positive().default(1080),
+    width: z.number().int().positive().default(1080),
+    height: z.number().int().positive().default(1920),
     fps: z.number().int().positive().default(25),
   }),
   scenes: z.array(sceneSchema).min(1),

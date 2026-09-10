@@ -4,10 +4,10 @@ export const projectConfigSchema = z.object({
   title: z.string().min(1),
   language: z.string().default('zh-CN'),
   video: z.object({
-    width: z.number().int().positive().default(1920),
-    height: z.number().int().positive().default(1080),
+    width: z.number().int().positive().default(1080),
+    height: z.number().int().positive().default(1920),
     fps: z.number().int().positive().default(25),
-  }).default({width: 1920, height: 1080, fps: 25}),
+  }).default({width: 1080, height: 1920, fps: 25}),
   voice: z.object({
     provider: z.enum(['mock', 'elevenlabs']).default('mock'),
     modelId: z.string().default('eleven_multilingual_v2'),

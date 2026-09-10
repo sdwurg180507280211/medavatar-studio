@@ -6,7 +6,7 @@ import type {MedAvatarProject} from '../src/core/schema';
 const defaultProject: MedAvatarProject = {
   version: '1.0',
   title: 'MedAvatar Demo',
-  video: {width: 1920, height: 1080, fps: 25},
+  video: {width: 1080, height: 1920, fps: 25},
   scenes: [
     {
       id: 'scene-001',
@@ -22,8 +22,8 @@ export const RemotionRoot: React.FC = () => (
   <Composition
     id="MedAvatarVideo"
     component={MedAvatarVideo}
-    width={1920}
-    height={1080}
+    width={1080}
+    height={1920}
     fps={25}
     durationInFrames={125}
     defaultProps={{project: defaultProject}}
