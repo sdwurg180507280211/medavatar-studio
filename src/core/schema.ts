@@ -17,9 +17,13 @@ export const sceneTypeSchema = z.enum([
 
 export const subtitleModeSchema = z.enum(['off', 'sentence', 'karaoke']);
 export const subtitleStyleSchema = z.enum(['medical', 'minimal', 'social']);
+export const sceneIdSchema = z.string().regex(
+  /^[A-Za-z0-9][A-Za-z0-9_-]*$/,
+  'scene id must contain only letters, numbers, underscores and hyphens',
+);
 
 export const sceneSchema = z.object({
-  id: z.string(),
+  id: sceneIdSchema,
   type: sceneTypeSchema,
   title: z.string().min(1).optional(),
   text: z.string().min(1),

@@ -1,3 +1,4 @@
+import {sceneIdSchema} from './core/schema.js';
 import type {AvatarLayout, MedAvatarProject, SceneType, SubtitleMode, SubtitleStyle} from './core/schema.js';
 
 const DEFAULT_TYPES: SceneType[] = [
@@ -19,6 +20,7 @@ const SUBTITLE_MODES = new Set<SubtitleMode>(['off', 'sentence', 'karaoke']);
 const SUBTITLE_STYLES = new Set<SubtitleStyle>(['medical', 'minimal', 'social']);
 
 type SceneDirective = {
+  id?: string;
   type?: SceneType;
   slide?: number;
   avatar?: AvatarLayout;
@@ -53,7 +55,11 @@ const parseDirective = (raw: string): SceneDirective => {
     if (separator < 1) throw new Error(`Invalid medavatar directive token: ${token}`);
     const key = token.slice(0, separator).toLowerCase();
     const value = token.slice(separator + 1);
-    if (key === 'type') {
+    if (key === 'id') {
+      const parsed = sceneIdSchema.safeParse(value);
+      if (!parsed.success) throw new Error(`Invalid scene id: ${value}`);
+      directive.id = parsed.data;
+    } else if (key === 'type') {
       if (!SCENE_TYPES.has(value as SceneType)) throw new Error(`Unknown scene type: ${value}`);
       directive.type = value as SceneType;
     } else if (key === 'slide') {
@@ -143,7 +149,7 @@ export const scriptToStoryboard = (
     const sceneTitle = sceneHeading ?? (index === 0 ? title : undefined);
 
     return {
-      id: `scene-${String(index + 1).padStart(3, '0')}`,
+      id: directive.id ?? `scene-${String(index + 1).padStart(3, '0')}`,
       type,
       title: sceneTitle,
       text,
@@ -166,6 +172,12 @@ export const scriptToStoryboard = (
         : undefined,
     };
   });
+
+  const seen = new Set<string>();
+  for (const scene of scenes) {
+    if (seen.has(scene.id)) throw new Error(`Duplicate medavatar scene id: ${scene.id}`);
+    seen.add(scene.id);
+  }
 
   return {
     version: '1.0',

@@ -1,0 +1,10 @@
+{
+  "version": "1.0",
+  "scenes": {
+    "vascular-injury": {
+      "subtitle": {
+        "style": "social"
+      }
+    }
+  }
+}

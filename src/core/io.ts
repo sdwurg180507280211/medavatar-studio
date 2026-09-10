@@ -22,6 +22,7 @@ export const projectPaths = (projectName: string) => {
     output,
     script: path.join(root, 'script.md'),
     config: path.join(root, 'project.json'),
+    overrides: path.join(root, 'storyboard.overrides.json'),
     scene: path.join(output, 'scene.json'),
     timing: path.join(output, 'timing.json'),
     alignment: path.join(output, 'alignment.json'),

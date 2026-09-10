@@ -30,6 +30,7 @@ jobs:
           test -f projects/demo/output/alignment.json
           test -f projects/demo/output/chapters.json
           test -f projects/demo/output/narration.wav
-          node -e "const s=require('./projects/demo/output/scene.json').scenes; if(s[0]?.title!=='高血压为什么会悄悄伤害血管'||s[0]?.avatar?.layout!=='hero'||s.at(-1)?.title!=='家庭血压管理') process.exit(1)"
+          node -e "const s=require('./projects/demo/output/scene.json').scenes; if(s[0]?.id!=='intro'||s[0]?.title!=='高血压为什么会悄悄伤害血管'||s[0]?.avatar?.layout!=='hero'||s[2]?.id!=='vascular-injury'||s[2]?.subtitle?.style!=='social'||s.at(-1)?.id!=='home-monitoring'||s.at(-1)?.title!=='家庭血压管理') process.exit(1)"
           node -e "const c=require('./projects/demo/output/captions.json'); if(!Array.isArray(c)||c.length<2||!c.some(x=>x.characters?.length)) process.exit(1)"
           node -e "const c=require('./projects/demo/output/chapters.json'); if(!Array.isArray(c)||c.length<1||c.some(x=>x.duration<=0)) process.exit(1)"
+          pnpm exec tsx -e "import {scriptToStoryboard} from './src/storyboard.ts'; let ok=false; try { scriptToStoryboard('x', '<!-- medavatar:id=same -->\\n甲\\n\\n<!-- medavatar:id=same -->\\n乙'); } catch (error) { ok=String(error).includes('Duplicate medavatar scene id'); } if (!ok) process.exit(1);"

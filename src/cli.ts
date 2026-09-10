@@ -12,6 +12,7 @@ import {captionCuesFromAlignment, captionCuesFromSceneDurations, type CaptionCue
 import {planAvatarChapters, type AvatarChapterManifest, type AvatarChapterManifestEntry, type AvatarChapterPlan} from './core/chapters.js';
 import {projectConfigSchema, type ProjectConfig} from './core/config.js';
 import {ensureDir, fileExists, projectPaths, readText, sha256, writeJson} from './core/io.js';
+import {applyStoryboardOverrides, storyboardOverridesSchema} from './core/overrides.js';
 import {projectSchema, type MedAvatarProject} from './core/schema.js';
 import {applyTimingsToScenes, sceneTimingsFromAlignment} from './core/timing.js';
 import {convertPptToPng} from './ppt.js';
@@ -91,12 +92,21 @@ const storyboard = async (projectName: string) => {
   const {paths, config} = await loadConfig(projectName);
   await ensureDir(paths.output);
   const script = await readText(paths.script);
-  const project = projectSchema.parse(scriptToStoryboard(config.title, script));
-  const configured: MedAvatarProject = {...project, video: config.video};
-  await writeJson(paths.scene, configured);
-  await writeChapterPlan(configured, config, paths);
+  const generated = projectSchema.parse(scriptToStoryboard(config.title, script));
+  const configured: MedAvatarProject = {...generated, video: config.video};
+  let project = configured;
+  if (await fileExists(paths.overrides)) {
+    const overrides = storyboardOverridesSchema.parse(JSON.parse(await readText(paths.overrides)));
+    const applied = applyStoryboardOverrides(configured, overrides);
+    project = applied.project;
+    for (const sceneId of applied.orphanSceneIds) {
+      console.warn(`• storyboard override ignored: unknown scene id ${sceneId}`);
+    }
+  }
+  await writeJson(paths.scene, project);
+  await writeChapterPlan(project, config, paths);
   console.log(`✓ storyboard -> ${path.relative(process.cwd(), paths.scene)}`);
-  return configured;
+  return project;
 };
 
 const makeTtsProvider = (config: ProjectConfig): {name: 'mock' | 'elevenlabs'; provider: TtsProvider} => {
