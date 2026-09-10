@@ -107,6 +107,11 @@ const shouldMaskBoundary = (project: MedAvatarProject, boundaryFrame: number) =>
   return sceneMasksAvatarReset(previous) || sceneMasksAvatarReset(next);
 };
 
+const pipSizeForScene = (scene: Scene) => {
+  const scale = scene.avatar?.scale ?? 0.28;
+  return Math.max(280, Math.min(520, Math.round(1280 * scale)));
+};
+
 const AvatarClip: React.FC<{
   project: MedAvatarProject;
   avatarSrc?: string;
@@ -119,15 +124,46 @@ const AvatarClip: React.FC<{
   const {scene, localFrame} = activeScene(project, globalFrame);
   const layout = scene.avatar?.layout ?? (scene.type === 'doctor_full' ? 'fullscreen' : 'bottom-right');
   if (layout === 'hidden') return null;
+
   const pip = layout !== 'fullscreen';
+  const pipSize = pipSizeForScene(scene);
   const enter = spring({fps, frame: localFrame, config:{damping:18}});
   const wrapper: React.CSSProperties = pip
-    ? {position:'absolute', width:470, height:840, bottom:36, right:layout === 'bottom-right' ? 42 : undefined, left:layout === 'bottom-left' ? 42 : undefined}
+    ? {
+        position:'absolute',
+        width:pipSize,
+        height:pipSize,
+        bottom:54,
+        right:layout === 'bottom-right' ? 54 : undefined,
+        left:layout === 'bottom-left' ? 54 : undefined,
+        borderRadius:'50%',
+        overflow:'hidden',
+        border:'6px solid rgba(255,255,255,.96)',
+        boxShadow:'0 18px 54px rgba(0,0,0,.38)',
+        background:'#071826',
+      }
     : {position:'absolute', inset:0};
+
+  const videoStyle: React.CSSProperties = pip
+    ? {
+        width:'100%',
+        height:'100%',
+        objectFit:'cover',
+        objectPosition:'50% 32%',
+        transform:'scale(1.22)',
+        transformOrigin:'50% 34%',
+      }
+    : {
+        width:'100%',
+        height:'100%',
+        objectFit:'contain',
+        objectPosition:'50% 50%',
+      };
+
   return (
-    <div style={{...wrapper, opacity, transform:`scale(${interpolate(enter,[0,1],[0.96,1])})`, transformOrigin:'bottom center', display:'flex', alignItems:'flex-end', justifyContent:'center', zIndex:20}}>
+    <div style={{...wrapper, opacity, transform:`scale(${interpolate(enter,[0,1],[0.96,1])})`, transformOrigin:pip ? 'center' : 'bottom center', display:'flex', alignItems:'center', justifyContent:'center', zIndex:20}}>
       {avatarSrc ? (
-        <OffthreadVideo src={staticFile(avatarSrc)} muted style={{width:'100%', height:'100%', objectFit:'contain'}} />
+        <OffthreadVideo src={staticFile(avatarSrc)} muted style={videoStyle} />
       ) : <MockDoctor />}
     </div>
   );
@@ -194,10 +230,11 @@ const SubtitleTrack: React.FC<{project: MedAvatarProject; captions: CaptionCue[]
   const visual = subtitlePresets[scene.subtitle?.style ?? 'medical'];
   const cue = captions.find((candidate) => candidate.sceneId === scene.id && time >= candidate.start - 0.02 && time < candidate.end + 0.06);
   const layout = scene.avatar?.layout ?? (scene.type === 'doctor_full' ? 'fullscreen' : 'bottom-right');
+  const pipSize = pipSizeForScene(scene);
   const position = layout === 'bottom-right'
-    ? {left:150, right:620}
+    ? {left:150, right:pipSize + 130}
     : layout === 'bottom-left'
-      ? {left:620, right:150}
+      ? {left:pipSize + 130, right:150}
       : {left:280, right:280};
   const characters = cue?.characters;
   return (
