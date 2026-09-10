@@ -200,7 +200,6 @@ const AvatarClip: React.FC<{
         height:'100%',
         objectFit:'cover',
         objectPosition:'50% 0%',
-        mixBlendMode:'lighten',
         filter:'drop-shadow(0 28px 70px rgba(0,0,0,.34))',
       };
 
@@ -296,11 +295,12 @@ const SceneView: React.FC<{
   scene: Scene;
   slideSrc?: string;
   prototypeVisuals?: PortraitPrototypeVisuals;
-}> = ({scene, slideSrc, prototypeVisuals}) => {
+  durationInFrames: number;
+}> = ({scene, slideSrc, prototypeVisuals, durationInFrames}) => {
   const prototypeVisual = prototypeVisuals?.scenes[scene.id];
   return (
     <AbsoluteFill style={{background:`radial-gradient(circle at 50% 12%, #164765 0%, ${palette.background} 52%, #04101A 100%)`}}>
-      {prototypeVisual ? <PortraitPrototypeVisualRenderer visual={prototypeVisual} /> : null}
+      {prototypeVisual ? <PortraitPrototypeVisualRenderer visual={prototypeVisual} durationInFrames={durationInFrames} /> : null}
       {!prototypeVisual && scene.type === 'doctor_ppt' ? <Slide scene={scene} slideSrc={slideSrc} /> : null}
       {!prototypeVisual && scene.type === 'medical_animation' ? <MedicalAnimationScene scene={scene} /> : null}
       {!prototypeVisual && scene.type === 'visual_full' ? <Slide scene={scene} slideSrc={slideSrc} /> : null}
@@ -331,7 +331,7 @@ export const MedAvatarVideo: React.FC<MedAvatarVideoProps> = ({
         const slideSrc = scene.slide ? assets.slides[scene.slide-1] : undefined;
         return (
           <Sequence key={scene.id} from={start} durationInFrames={duration} premountFor={project.video.fps}>
-            <SceneView scene={scene} slideSrc={slideSrc} prototypeVisuals={prototypeVisuals} />
+            <SceneView scene={scene} slideSrc={slideSrc} prototypeVisuals={prototypeVisuals} durationInFrames={duration} />
           </Sequence>
         );
       })}

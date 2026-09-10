@@ -23,6 +23,9 @@ jobs:
       - run: pnpm install --no-frozen-lockfile
       - name: Typecheck
         run: pnpm typecheck
+      - name: HeyGen Alpha contract
+        if: github.event_name == 'push'
+        run: pnpm exec tsx src/providers/heygenAlphaContract.ts
       - name: Mock pipeline smoke test
         run: |
           TTS_PROVIDER=mock pnpm medavatar voice demo
@@ -77,7 +80,7 @@ jobs:
         id: portrait_changes
         shell: bash
         run: |
-          if git diff --name-only HEAD^ HEAD | grep -Eq '^(remotion/|projects/portrait-demo/|src/production/(portraitPrototype|renderPortraitGolden|renderProps)\.ts$|package\.json$)'; then
+          if git diff --name-only HEAD^ HEAD | grep -Eq '^(remotion/|projects/portrait-demo/|src/providers/(heygen|heygenAlphaContract|types)\.ts$|src/cli\.ts$|src/core/io\.ts$|src/production/(portraitPrototype|renderPortraitGolden|renderProps|renderCommand|portraitIteration)\.ts$|package\.json$|pnpm-lock\.yaml$)'; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
           else
             echo "changed=false" >> "$GITHUB_OUTPUT"

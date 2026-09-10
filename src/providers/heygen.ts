@@ -1,11 +1,25 @@
 import {spawn} from 'node:child_process';
 import {randomUUID} from 'node:crypto';
-import {mkdir, readFile, rm, stat, writeFile} from 'node:fs/promises';
+import {mkdir, readFile, rename, rm, stat, writeFile} from 'node:fs/promises';
 import path from 'node:path';
 import type {AvatarProvider, AvatarRenderResult} from './types.js';
 
 export const HEYGEN_AVATAR_ASPECT_RATIO = '9:16' as const;
 export const HEYGEN_OUTPUT_FORMAT = 'webm' as const;
+
+export class HeyGenMediaToolError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'HeyGenMediaToolError';
+  }
+}
+
+export class HeyGenTransparencyError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'HeyGenTransparencyError';
+  }
+}
 
 const validateOutputFormat = (value: unknown, source: string) => {
   if (value === undefined || value === null) return undefined;
@@ -46,6 +60,42 @@ const captureCommand = (command: string, args: string[]): Promise<Buffer> => new
   });
 });
 
+export type HeyGenAlphaInspectionOptions = {
+  ffprobeBin?: string;
+  ffmpegBin?: string;
+};
+
+const mediaBins = (options: HeyGenAlphaInspectionOptions = {}) => ({
+  ffprobeBin: options.ffprobeBin ?? process.env.FFPROBE_BIN ?? 'ffprobe',
+  ffmpegBin: options.ffmpegBin ?? process.env.FFMPEG_BIN ?? 'ffmpeg',
+});
+
+export const assertHeyGenAlphaInspectionAvailable = async (
+  options: HeyGenAlphaInspectionOptions = {},
+) => {
+  const {ffprobeBin, ffmpegBin} = mediaBins(options);
+  try {
+    await captureCommand(ffprobeBin, ['-version']);
+  } catch (error) {
+    throw new HeyGenMediaToolError(
+      `HeyGen Alpha validation requires ffprobe (${ffprobeBin}): ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  let decoders: Buffer;
+  try {
+    decoders = await captureCommand(ffmpegBin, ['-hide_banner', '-decoders']);
+  } catch (error) {
+    throw new HeyGenMediaToolError(
+      `HeyGen Alpha validation requires ffmpeg (${ffmpegBin}): ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  if (!decoders.toString('utf8').includes('libvpx-vp9')) {
+    throw new HeyGenMediaToolError(
+      `HeyGen Alpha validation requires an ffmpeg build with the libvpx-vp9 decoder (${ffmpegBin}).`,
+    );
+  }
+};
+
 export type HeyGenAlphaInspection = {
   alphaMode?: string;
   transparentPixels: number;
@@ -61,38 +111,60 @@ type HeyGenProbe = {
 
 export const inspectTransparentWebm = async (
   file: string,
-  options: {ffprobeBin?: string; ffmpegBin?: string} = {},
+  options: HeyGenAlphaInspectionOptions = {},
 ): Promise<HeyGenAlphaInspection> => {
-  const ffprobeBin = options.ffprobeBin ?? process.env.FFPROBE_BIN ?? 'ffprobe';
-  const ffmpegBin = options.ffmpegBin ?? process.env.FFMPEG_BIN ?? 'ffmpeg';
-  const probeOutput = await captureCommand(ffprobeBin, [
-    '-v', 'error',
-    '-select_streams', 'v:0',
-    '-show_entries', 'stream=codec_name:stream_tags=ALPHA_MODE',
-    '-of', 'json',
-    file,
-  ]);
+  await assertHeyGenAlphaInspectionAvailable(options);
+  const {ffprobeBin, ffmpegBin} = mediaBins(options);
+
+  let probeOutput: Buffer;
+  try {
+    probeOutput = await captureCommand(ffprobeBin, [
+      '-v', 'error',
+      '-select_streams', 'v:0',
+      '-show_entries', 'stream=codec_name:stream_tags=ALPHA_MODE',
+      '-of', 'json',
+      file,
+    ]);
+  } catch (error) {
+    throw new HeyGenTransparencyError(
+      `Could not inspect HeyGen WebM ${file}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+
   let probe: HeyGenProbe;
   try {
     probe = JSON.parse(probeOutput.toString('utf8')) as HeyGenProbe;
   } catch (error) {
-    throw new Error(`Could not parse ${ffprobeBin} output for ${file}: ${String(error)}`);
+    throw new HeyGenTransparencyError(`Could not parse ${ffprobeBin} output for ${file}: ${String(error)}`);
   }
   const tags = probe.streams?.[0]?.tags ?? {};
   const alphaMode = tags.ALPHA_MODE ?? tags.alpha_mode;
+  if (!alphaMode || alphaMode === '0') {
+    throw new HeyGenTransparencyError(
+      `HeyGen returned ${file} without ALPHA_MODE metadata. The selected Avatar may not be matting-enabled.`,
+    );
+  }
 
-  const alphaBytes = await captureCommand(ffmpegBin, [
-    '-hide_banner',
-    '-loglevel', 'error',
-    '-c:v', 'libvpx-vp9',
-    '-i', file,
-    '-map', '0:v:0',
-    '-frames:v', '5',
-    '-vf', 'alphaextract',
-    '-pix_fmt', 'gray',
-    '-f', 'rawvideo',
-    '-',
-  ]);
+  let alphaBytes: Buffer;
+  try {
+    alphaBytes = await captureCommand(ffmpegBin, [
+      '-hide_banner',
+      '-loglevel', 'error',
+      '-c:v', 'libvpx-vp9',
+      '-i', file,
+      '-map', '0:v:0',
+      '-frames:v', '5',
+      '-vf', 'alphaextract',
+      '-pix_fmt', 'gray',
+      '-f', 'rawvideo',
+      '-',
+    ]);
+  } catch (error) {
+    throw new HeyGenTransparencyError(
+      `Could not decode Alpha pixels from ${file}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+
   let transparentPixels = 0;
   let semiTransparentPixels = 0;
   for (const value of alphaBytes) {
@@ -106,12 +178,40 @@ export const inspectTransparentWebm = async (
     sampledPixels: alphaBytes.length,
   } satisfies HeyGenAlphaInspection;
   if (alphaBytes.length === 0 || transparentPixels + semiTransparentPixels === 0) {
-    throw new Error(
+    throw new HeyGenTransparencyError(
       `HeyGen returned ${file} without decoded transparency `
-      + `(ALPHA_MODE=${alphaMode ?? 'missing'}). The selected Avatar may not be matting-enabled.`,
+      + `(ALPHA_MODE=${alphaMode}). The selected Avatar may not be matting-enabled.`,
     );
   }
   return inspection;
+};
+
+const fileExists = async (file: string) => stat(file).then(() => true).catch(() => false);
+
+const promoteValidatedFile = async (candidate: string, outputPath: string) => {
+  try {
+    await rename(candidate, outputPath);
+    return;
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (process.platform !== 'win32' || !code || !['EEXIST', 'EPERM', 'EACCES'].includes(code)) throw error;
+  }
+
+  // Windows can reject rename-over-existing. Keep a rollback copy so a failed
+  // promotion never destroys the last validated paid asset.
+  const backup = `${outputPath}.backup-${randomUUID()}`;
+  const hadOutput = await fileExists(outputPath);
+  if (hadOutput) await rename(outputPath, backup);
+  try {
+    await rename(candidate, outputPath);
+    if (hadOutput) await rm(backup, {force: true});
+  } catch (error) {
+    if (hadOutput) {
+      await rm(outputPath, {force: true});
+      await rename(backup, outputPath).catch(() => undefined);
+    }
+    throw error;
+  }
 };
 
 type HeyGenVideo = {
@@ -235,15 +335,25 @@ export class HeyGenAvatarProvider implements AvatarProvider {
   }
 
   async render({audioPath, outputPath, title}: {audioPath: string; outputPath: string; title?: string}) {
+    // Fail before the first paid/network operation when local validation cannot run.
+    await assertHeyGenAlphaInspectionAvailable();
+
     const assetId = await this.uploadAudio(audioPath);
     const created = await this.createVideo(assetId, title);
     const completed = await this.waitForVideo(created.videoId);
     const response = await fetch(completed.video_url!);
     if (!response.ok) throw new Error(`HeyGen download failed: ${response.status}`);
     await mkdir(path.dirname(outputPath), {recursive: true});
-    await writeFile(outputPath, Buffer.from(await response.arrayBuffer()));
+
+    const candidate = path.join(
+      path.dirname(outputPath),
+      `.${path.basename(outputPath)}.${randomUUID()}.pending.webm`,
+    );
+    await rm(candidate, {force: true});
     try {
-      const alpha = await inspectTransparentWebm(outputPath);
+      await writeFile(candidate, Buffer.from(await response.arrayBuffer()));
+      const alpha = await inspectTransparentWebm(candidate);
+      await promoteValidatedFile(candidate, outputPath);
       return {
         videoPath: outputPath,
         videoId: created.videoId,
@@ -255,9 +365,8 @@ export class HeyGenAvatarProvider implements AvatarProvider {
         transparent: true,
         alphaMode: alpha.alphaMode,
       } satisfies AvatarRenderResult;
-    } catch (error) {
-      await rm(outputPath, {force: true});
-      throw error;
+    } finally {
+      await rm(candidate, {force: true});
     }
   }
 }

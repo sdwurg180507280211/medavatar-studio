@@ -16,7 +16,13 @@ import {projectSchema, type MedAvatarProject} from './core/schema.js';
 import {applyTimingsToScenes, sceneTimingsFromAlignment} from './core/timing.js';
 import {convertPptToPng} from './ppt.js';
 import {ElevenLabsTtsProvider} from './providers/elevenlabs.js';
-import {HeyGenAvatarProvider, HEYGEN_AVATAR_ASPECT_RATIO, HEYGEN_OUTPUT_FORMAT, inspectTransparentWebm} from './providers/heygen.js';
+import {
+  HeyGenAvatarProvider,
+  HeyGenTransparencyError,
+  HEYGEN_AVATAR_ASPECT_RATIO,
+  HEYGEN_OUTPUT_FORMAT,
+  inspectTransparentWebm,
+} from './providers/heygen.js';
 import {MockTtsProvider} from './providers/mock.js';
 import type {CharacterAlignment, TimingSegment, TtsProvider} from './providers/types.js';
 import {renderProject} from './production/renderCommand.js';
@@ -218,6 +224,25 @@ const manifestIsComplete = async (
   return checks.every(Boolean);
 };
 
+const inspectCachedTransparentAvatar = async (file: string, label: string) => {
+  if (!(await fileExists(file))) return undefined;
+  try {
+    return await inspectTransparentWebm(file);
+  } catch (error) {
+    if (error instanceof HeyGenTransparencyError) {
+      console.warn(`• cached ${label} transparency validation failed: ${error.message}`);
+      return undefined;
+    }
+    throw error;
+  }
+};
+
+const clearChapteredAvatarArtifacts = async (paths: ReturnType<typeof projectPaths>) => {
+  await rm(paths.avatarManifest, {force: true});
+  await rm(paths.avatarChapters, {recursive: true, force: true});
+  await rm(paths.audioChapters, {recursive: true, force: true});
+};
+
 const renderSingleAvatar = async (
   projectName: string,
   config: ProjectConfig,
@@ -225,10 +250,6 @@ const renderSingleAvatar = async (
   audioPath: string,
   avatarId: string,
 ) => {
-  await rm(paths.avatarMetadata, {force: true});
-  await rm(paths.avatarManifest, {force: true});
-  await rm(paths.avatarChapters, {recursive: true, force: true});
-  await rm(paths.audioChapters, {recursive: true, force: true});
   const audio = await readFile(audioPath);
   const identity = `single|${avatarId}|${config.avatar.resolution}|${HEYGEN_AVATAR_ASPECT_RATIO}|${HEYGEN_OUTPUT_FORMAT}|transparent`;
   const key = sha256(Buffer.concat([audio, Buffer.from(`|${identity}|${AVATAR_PRESENTATION_CACHE_VERSION}`)]));
@@ -236,18 +257,11 @@ const renderSingleAvatar = async (
   const legacyKey = sha256(Buffer.concat([audio, Buffer.from(`|${legacyIdentity}|${LEGACY_AVATAR_PRESENTATION_CACHE_VERSION}`)]));
   const cache = await readCache(paths.cache);
 
-  const validateCachedAvatar = async () => {
-    if (!(await fileExists(paths.avatar))) return undefined;
-    try {
-      return await inspectTransparentWebm(paths.avatar);
-    } catch (error) {
-      console.warn(`• cached avatar transparency validation failed: ${error instanceof Error ? error.message : String(error)}`);
-      return undefined;
-    }
-  };
-
-  const cachedAlpha = cache.avatar === key ? await validateCachedAvatar() : undefined;
+  const cachedAlpha = cache.avatar === key
+    ? await inspectCachedTransparentAvatar(paths.avatar, 'avatar')
+    : undefined;
   if (cachedAlpha) {
+    await clearChapteredAvatarArtifacts(paths);
     await writeJson(paths.avatarMetadata, {
       provider: 'heygen',
       strategy: 'single',
@@ -262,8 +276,11 @@ const renderSingleAvatar = async (
     return paths.avatar;
   }
 
-  const legacyAlpha = cache.avatar === legacyKey ? await validateCachedAvatar() : undefined;
+  const legacyAlpha = cache.avatar === legacyKey
+    ? await inspectCachedTransparentAvatar(paths.avatar, 'legacy avatar')
+    : undefined;
   if (legacyAlpha) {
+    await clearChapteredAvatarArtifacts(paths);
     await patchCache(paths.cache, {avatar: key});
     await writeJson(paths.avatarMetadata, {
       provider: 'heygen',
@@ -285,6 +302,7 @@ const renderSingleAvatar = async (
     timeoutMs: config.avatar.timeoutMs,
   });
   const result = await provider.render({audioPath, outputPath: paths.avatar, title: config.title});
+  await clearChapteredAvatarArtifacts(paths);
   await writeJson(paths.avatarMetadata, {
     provider: 'heygen',
     strategy: 'single',
@@ -310,8 +328,6 @@ const renderChapteredAvatar = async (
   audioPath: string,
   avatarId: string,
 ) => {
-  await rm(paths.avatarMetadata, {force: true});
-  await rm(paths.avatar, {force: true});
   const project = projectSchema.parse(JSON.parse(await readText(paths.scene)));
   const plan = planAvatarChapters(project.scenes, config.avatar.chapterMaxSeconds);
   await writeJson(paths.chapters, plan);
@@ -326,16 +342,18 @@ const renderChapteredAvatar = async (
     const validated = [] as Array<{id: string; videoFile: string; alphaMode?: string}>;
     let allTransparent = true;
     for (const chapter of existingManifest!.chapters) {
-      try {
-        const inspection = await inspectTransparentWebm(path.join(paths.avatarChapters, chapter.videoFile));
-        validated.push({...chapter, alphaMode: inspection.alphaMode});
-      } catch (error) {
+      const inspection = await inspectCachedTransparentAvatar(
+        path.join(paths.avatarChapters, chapter.videoFile),
+        chapter.id,
+      );
+      if (!inspection) {
         allTransparent = false;
-        console.warn(`• cached ${chapter.id} transparency validation failed: ${error instanceof Error ? error.message : String(error)}`);
         break;
       }
+      validated.push({...chapter, alphaMode: inspection.alphaMode});
     }
     if (allTransparent) {
+      await rm(paths.avatar, {force: true});
       await writeJson(paths.avatarMetadata, {
         provider: 'heygen',
         strategy: 'chaptered',
@@ -382,14 +400,9 @@ const renderChapteredAvatar = async (
     const reusable = previous.find(
       (entry) => entry.id === chapter.id && entry.hash === hash && entry.videoFile === videoFile,
     );
-    let reusedInspection: Awaited<ReturnType<typeof inspectTransparentWebm>> | undefined;
-    if (reusable && await fileExists(videoPath)) {
-      try {
-        reusedInspection = await inspectTransparentWebm(videoPath);
-      } catch (error) {
-        console.warn(`• cached ${chapter.id} transparency validation failed: ${error instanceof Error ? error.message : String(error)}`);
-      }
-    }
+    const reusedInspection = reusable
+      ? await inspectCachedTransparentAvatar(videoPath, chapter.id)
+      : undefined;
     if (reusable && reusedInspection) {
       completed.push({...chapter, hash, videoFile});
       metadataChapters.push({
@@ -441,6 +454,7 @@ const renderChapteredAvatar = async (
       await rm(path.join(paths.avatarChapters, file), {force: true});
     }
   }
+  await rm(paths.avatar, {force: true});
   await writeJson(paths.avatarMetadata, {
     provider: 'heygen',
     strategy: 'chaptered',

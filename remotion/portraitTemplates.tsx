@@ -4,9 +4,10 @@ import {EmphasisCard} from './EmphasisCard';
 
 export const PortraitPrototypeVisualRenderer: React.FC<{
   visual: PortraitPrototypeVisual;
-}> = ({visual}) => {
+  durationInFrames: number;
+}> = ({visual, durationInFrames}) => {
   switch (visual.template) {
     case 'emphasis-card':
-      return <EmphasisCard data={visual} />;
+      return <EmphasisCard data={visual} durationInFrames={durationInFrames} />;
   }
 };

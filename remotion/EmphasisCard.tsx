@@ -5,7 +5,10 @@ import {getCompositionLayout} from './layout';
 
 const seconds = (fps: number, value: number) => Math.round(fps * value);
 
-export const EmphasisCard: React.FC<{data: EmphasisCardPrototype}> = ({data}) => {
+export const EmphasisCard: React.FC<{
+  data: EmphasisCardPrototype;
+  durationInFrames: number;
+}> = ({data, durationInFrames}) => {
   const frame = useCurrentFrame();
   const {fps, width, height} = useVideoConfig();
   const layout = getCompositionLayout(width, height);
@@ -37,8 +40,17 @@ export const EmphasisCard: React.FC<{data: EmphasisCardPrototype}> = ({data}) =>
     [0, 1],
     {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'},
   );
+  const exitFrames = Math.min(durationInFrames, Math.max(2, seconds(fps, 0.28)));
+  const exitStart = Math.max(0, durationInFrames - exitFrames);
+  const exit = interpolate(
+    frame,
+    [exitStart, Math.max(exitStart + 1, durationInFrames - 1)],
+    [1, 0],
+    {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'},
+  );
   const breathe = Math.sin((frame / fps) * Math.PI * 0.72);
   const holdLift = Math.round(breathe * 3 * layout.unit * hold);
+  const exitLift = interpolate(exit, [0, 1], [-Math.round(10 * layout.unit), 0]);
   const holdScale = 1 + breathe * 0.008 * hold;
   const glowOpacity = 0.72 + (breathe + 1) * 0.07 * hold;
 
@@ -50,7 +62,7 @@ export const EmphasisCard: React.FC<{data: EmphasisCardPrototype}> = ({data}) =>
   const glowSize = Math.round(Math.min(width, height) * 0.62);
 
   return (
-    <div style={{position: 'absolute', inset: 0, overflow: 'hidden'}}>
+    <div style={{position: 'absolute', inset: 0, overflow: 'hidden', opacity: exit}}>
       <div
         style={{
           position: 'absolute',
@@ -76,7 +88,7 @@ export const EmphasisCard: React.FC<{data: EmphasisCardPrototype}> = ({data}) =>
           textAlign: 'center',
           color: '#fff',
           textShadow: '0 8px 32px rgba(0,0,0,.34)',
-          transform: `translateY(${holdLift}px)`,
+          transform: `translateY(${holdLift + exitLift}px)`,
         }}
       >
         <div
