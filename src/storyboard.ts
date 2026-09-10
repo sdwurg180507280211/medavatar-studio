@@ -1,4 +1,4 @@
-import type {MedAvatarProject, SceneType, SubtitleMode, SubtitleStyle} from './core/schema.js';
+import type {AvatarLayout, MedAvatarProject, SceneType, SubtitleMode, SubtitleStyle} from './core/schema.js';
 
 const DEFAULT_TYPES: SceneType[] = [
   'doctor_full',
@@ -14,8 +14,7 @@ const SCENE_TYPES = new Set<SceneType>([
   'visual_full',
 ]);
 
-type AvatarLayout = 'fullscreen' | 'bottom-right' | 'bottom-left' | 'hidden';
-const AVATAR_LAYOUTS = new Set<AvatarLayout>(['fullscreen', 'bottom-right', 'bottom-left', 'hidden']);
+const AVATAR_LAYOUTS = new Set<AvatarLayout>(['hero', 'fullscreen', 'bottom-right', 'bottom-left', 'hidden']);
 const SUBTITLE_MODES = new Set<SubtitleMode>(['off', 'sentence', 'karaoke']);
 const SUBTITLE_STYLES = new Set<SubtitleStyle>(['medical', 'minimal', 'social']);
 
@@ -86,8 +85,9 @@ const parseDirective = (raw: string): SceneDirective => {
 };
 
 const scriptBlocks = (script: string) => {
-  const blocks: Array<{text: string; directive: SceneDirective}> = [];
+  const blocks: Array<{text: string; directive: SceneDirective; title?: string}> = [];
   let pending: SceneDirective = {};
+  let pendingTitle: string | undefined;
 
   for (const rawBlock of script.split(/\n\s*\n/g)) {
     let block = rawBlock.trim();
@@ -100,12 +100,16 @@ const scriptBlocks = (script: string) => {
       if (!block) continue;
     }
 
-    if (/^#{1,6}\s+[^\n]+$/.test(block)) continue;
-    block = block.replace(/^#{1,6}\s+[^\n]+\n+/, '').trim();
-    if (!block) continue;
+    const headingMatch = block.match(/^#{1,6}\s+([^\n]+)(?:\n+|$)/);
+    if (headingMatch) {
+      pendingTitle = headingMatch[1].trim();
+      block = block.slice(headingMatch[0].length).trim();
+      if (!block) continue;
+    }
 
-    blocks.push({text: block, directive: pending});
+    blocks.push({text: block, directive: pending, title: pendingTitle});
     pending = {};
+    pendingTitle = undefined;
   }
 
   return blocks;
@@ -119,7 +123,7 @@ export const scriptToStoryboard = (
   if (blocks.length === 0) throw new Error('script.md has no narration paragraphs.');
 
   let nextSlide = 1;
-  const scenes = blocks.map(({text, directive}, index) => {
+  const scenes = blocks.map(({text, directive, title: sceneHeading}, index) => {
     const type = directive.type ?? DEFAULT_TYPES[index % DEFAULT_TYPES.length];
     const hasSlide = type === 'doctor_ppt' || type === 'visual_full';
     const isAnimation = type === 'medical_animation';
@@ -131,15 +135,17 @@ export const scriptToStoryboard = (
       ? 'hidden'
       : hasSlide || isAnimation
         ? 'bottom-right'
-        : 'fullscreen';
+        : 'hero';
     const layout = directive.avatar ?? defaultLayout;
-    const defaultScale = layout === 'fullscreen' ? 1 : 0.28;
+    const defaultScale = layout === 'hero' || layout === 'fullscreen' ? 1 : 0.28;
     const defaultKeywords = isAnimation ? ['血管', '压力'] : [];
     const keywords = directive.keywords ?? defaultKeywords;
+    const sceneTitle = sceneHeading ?? (index === 0 ? title : undefined);
 
     return {
       id: `scene-${String(index + 1).padStart(3, '0')}`,
       type,
+      title: sceneTitle,
       text,
       durationInSeconds: directive.duration ?? estimateDuration(text),
       slide,

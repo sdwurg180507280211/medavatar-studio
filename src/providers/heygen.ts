@@ -3,6 +3,8 @@ import {mkdir, readFile, stat, writeFile} from 'node:fs/promises';
 import path from 'node:path';
 import type {AvatarProvider} from './types.js';
 
+export const HEYGEN_AVATAR_ASPECT_RATIO = '9:16' as const;
+
 type HeyGenVideo = {
   id: string;
   status: string;
@@ -59,7 +61,7 @@ export class HeyGenAvatarProvider implements AvatarProvider {
         avatar_id: this.avatarId,
         title,
         resolution: this.options.resolution ?? '1080p',
-        aspect_ratio: '9:16',
+        aspect_ratio: HEYGEN_AVATAR_ASPECT_RATIO,
         output_format: 'webm',
         audio_asset_id: audioAssetId,
       }),

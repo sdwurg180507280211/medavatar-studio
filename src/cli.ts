@@ -16,15 +16,15 @@ import {projectSchema, type MedAvatarProject} from './core/schema.js';
 import {applyTimingsToScenes, sceneTimingsFromAlignment} from './core/timing.js';
 import {convertPptToPng} from './ppt.js';
 import {ElevenLabsTtsProvider} from './providers/elevenlabs.js';
-import {HeyGenAvatarProvider} from './providers/heygen.js';
+import {HeyGenAvatarProvider, HEYGEN_AVATAR_ASPECT_RATIO} from './providers/heygen.js';
 import {MockTtsProvider} from './providers/mock.js';
 import type {CharacterAlignment, TimingSegment, TtsProvider} from './providers/types.js';
 import {scriptToStoryboard} from './storyboard.js';
 
 const program = new Command();
-program.name('medavatar').description('MedAvatar Studio CLI').version('0.3.0');
+program.name('medavatar').description('MedAvatar Studio CLI').version('0.4.0');
 
-const AVATAR_PRESENTATION_CACHE_VERSION = 'full-frame-v1';
+const AVATAR_PRESENTATION_CACHE_VERSION = 'portrait-source-v1';
 
 type CacheFile = Record<string, string | undefined>;
 type AvatarStrategy = 'single' | 'chaptered';
@@ -222,25 +222,12 @@ const renderSingleAvatar = async (
   await rm(paths.avatarChapters, {recursive: true, force: true});
   await rm(paths.audioChapters, {recursive: true, force: true});
   const audio = await readFile(audioPath);
-  const identity = `single|${avatarId}|${config.avatar.resolution}`;
+  const identity = `single|${avatarId}|${config.avatar.resolution}|${HEYGEN_AVATAR_ASPECT_RATIO}`;
   const key = sha256(Buffer.concat([audio, Buffer.from(`|${identity}|${AVATAR_PRESENTATION_CACHE_VERSION}`)]));
-  const legacyKey = sha256(Buffer.concat([audio, Buffer.from(`|${identity}`)]));
-  const legacyRaw = path.join(paths.output, 'avatar-raw.webm');
   const cache = await readCache(paths.cache);
 
   if (cache.avatar === key && await fileExists(paths.avatar)) {
     console.log(`✓ avatar cache hit -> ${path.relative(process.cwd(), paths.avatar)}`);
-    return paths.avatar;
-  }
-
-  // v0.3 briefly generated a matted/cropped avatar.webm while keeping the
-  // original HeyGen frame as avatar-raw.webm. Promote that paid raw asset to
-  // the new full-frame source instead of calling HeyGen again.
-  if (cache.avatar === legacyKey && await fileExists(legacyRaw)) {
-    await copyFile(legacyRaw, paths.avatar);
-    await rm(legacyRaw, {force: true});
-    await patchCache(paths.cache, {avatar: key});
-    console.log(`✓ migrated full-frame avatar -> ${path.relative(process.cwd(), paths.avatar)}`);
     return paths.avatar;
   }
 
@@ -250,9 +237,9 @@ const renderSingleAvatar = async (
     timeoutMs: config.avatar.timeoutMs,
   });
   await provider.render({audioPath, outputPath: paths.avatar, title: config.title});
-  await rm(legacyRaw, {force: true});
+  await rm(path.join(paths.output, 'avatar-raw.webm'), {force: true});
   await patchCache(paths.cache, {avatar: key});
-  console.log(`✓ heygen full-frame avatar -> ${path.relative(process.cwd(), paths.avatar)}`);
+  console.log(`✓ heygen ${HEYGEN_AVATAR_ASPECT_RATIO} portrait avatar -> ${path.relative(process.cwd(), paths.avatar)}`);
   return paths.avatar;
 };
 
@@ -270,7 +257,7 @@ const renderChapteredAvatar = async (
   const fullAudio = await readFile(audioPath);
   const globalKey = sha256(Buffer.concat([
     fullAudio,
-    Buffer.from(`|chaptered|${avatarId}|${config.avatar.resolution}|${config.avatar.chapterMaxSeconds}|${JSON.stringify(plan)}`),
+    Buffer.from(`|chaptered|${avatarId}|${config.avatar.resolution}|${HEYGEN_AVATAR_ASPECT_RATIO}|${AVATAR_PRESENTATION_CACHE_VERSION}|${config.avatar.chapterMaxSeconds}|${JSON.stringify(plan)}`),
   ]));
   const cache = await readCache(paths.cache);
   const existingManifest = await readAvatarManifest(paths.avatarManifest);
@@ -292,7 +279,10 @@ const renderChapteredAvatar = async (
   for (let index = 0; index < plan.length; index += 1) {
     const chapter = plan[index];
     const chapterAudio = await readFile(audioFiles[index]);
-    const hash = sha256(Buffer.concat([chapterAudio, Buffer.from(`|${avatarId}|${config.avatar.resolution}`)]));
+    const hash = sha256(Buffer.concat([
+      chapterAudio,
+      Buffer.from(`|${avatarId}|${config.avatar.resolution}|${HEYGEN_AVATAR_ASPECT_RATIO}|${AVATAR_PRESENTATION_CACHE_VERSION}`),
+    ]));
     const videoFile = `${chapter.id}.webm`;
     const videoPath = path.join(paths.avatarChapters, videoFile);
     const reusable = previous.find((entry) => entry.id === chapter.id && entry.hash === hash && entry.videoFile === videoFile);
@@ -306,7 +296,7 @@ const renderChapteredAvatar = async (
         title: `${config.title} · ${chapter.id}`,
       });
       completed.push({...chapter, hash, videoFile});
-      console.log(`✓ ${chapter.id} heygen full-frame avatar`);
+      console.log(`✓ ${chapter.id} heygen ${HEYGEN_AVATAR_ASPECT_RATIO} portrait avatar`);
     }
     await writeJson(paths.avatarManifest, {strategy: 'chaptered', chapters: completed} satisfies AvatarChapterManifest);
   }
@@ -316,7 +306,7 @@ const renderChapteredAvatar = async (
     if (file.endsWith('.webm') && !keep.has(file)) await rm(path.join(paths.avatarChapters, file), {force: true});
   }
   await patchCache(paths.cache, {avatar: globalKey});
-  console.log(`✓ chaptered heygen avatar -> ${completed.length} full-frame chapters`);
+  console.log(`✓ chaptered heygen avatar -> ${completed.length} portrait chapters`);
   return paths.avatarManifest;
 };
 
@@ -364,26 +354,11 @@ const slides = async (projectName: string) => {
   return images;
 };
 
-// Portrait avatar footage renders as a right-anchored full-height column on
-// the 16:9 canvas; landscape footage keeps the full-bleed fullscreen view.
-const avatarOrientationOf = async (video: string): Promise<'portrait' | 'landscape' | undefined> => {
-  const probe = await new Promise<string>((resolve) => {
-    const child = spawn('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height', '-of', 'csv=p=0', video]);
-    let out = '';
-    child.stdout.on('data', (chunk) => (out += chunk));
-    child.on('error', () => resolve(''));
-    child.on('exit', () => resolve(out.trim()));
-  });
-  const [width, height] = probe.split(',').map((value) => Number(value));
-  if (!width || !height) return undefined;
-  return height > width ? 'portrait' : 'landscape';
-};
-
 const stageAssets = async (projectName: string) => {
   const paths = projectPaths(projectName);
   await rm(paths.publicGenerated, {recursive: true, force: true});
   await ensureDir(paths.publicGenerated);
-  const assets: {narration?: string; avatar?: string; avatarOrientation?: 'portrait' | 'landscape'; avatarChapters?: StagedAvatarChapter[]; slides: string[]} = {slides: []};
+  const assets: {narration?: string; avatar?: string; avatarChapters?: StagedAvatarChapter[]; slides: string[]} = {slides: []};
   const narrationCandidates = [paths.narrationMp3, paths.narrationWav];
   for (const source of narrationCandidates) {
     if (await fileExists(source)) {
@@ -405,13 +380,9 @@ const stageAssets = async (projectName: string) => {
         end: chapter.end,
       });
     }
-    assets.avatarOrientation = await avatarOrientationOf(
-      path.join(paths.publicGenerated, manifest.chapters[0].videoFile),
-    );
   } else if (await fileExists(paths.avatar)) {
     await copyFile(paths.avatar, path.join(paths.publicGenerated, 'avatar.webm'));
     assets.avatar = path.posix.join('generated', projectName, 'avatar.webm');
-    assets.avatarOrientation = await avatarOrientationOf(path.join(paths.publicGenerated, 'avatar.webm'));
   }
 
   if (await fileExists(paths.slides)) {

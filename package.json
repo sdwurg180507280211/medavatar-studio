@@ -1,7 +1,7 @@
 {
   "name": "medavatar-studio",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.4.0",
   "description": "AI-powered medical explainer video pipeline with digital avatars, slides, narration and Remotion.",
   "type": "module",
   "scripts": {

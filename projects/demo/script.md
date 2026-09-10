@@ -1,6 +1,6 @@
 # 高血压为什么会悄悄伤害血管
 
-<!-- medavatar:type=doctor_full avatar=fullscreen subtitle=karaoke subtitle_style=medical -->
+<!-- medavatar:type=doctor_full avatar=hero subtitle=karaoke subtitle_style=medical -->
 很多高血压患者并没有明显的不舒服，但没有症状，并不代表身体没有受到影响。
 
 <!-- medavatar:type=doctor_ppt slide=1 avatar=bottom-right scale=0.28 subtitle=karaoke subtitle_style=minimal -->
@@ -12,5 +12,7 @@
 <!-- medavatar:type=doctor_ppt slide=2 avatar=bottom-right scale=0.28 subtitle=karaoke subtitle_style=minimal -->
 长期管理高血压，需要关注规律监测、生活方式以及规范治疗，而不是只看有没有症状。
 
-<!-- medavatar:type=doctor_full avatar=fullscreen subtitle=karaoke subtitle_style=medical -->
+## 家庭血压管理
+
+<!-- medavatar:type=doctor_full avatar=hero subtitle=karaoke subtitle_style=medical -->
 如果已经发现血压升高，建议记录家庭血压，并结合专业医疗建议制定适合自己的长期管理方案。

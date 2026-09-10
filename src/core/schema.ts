@@ -1,6 +1,7 @@
 import {z} from 'zod';
 
 export const avatarLayoutSchema = z.enum([
+  'hero',
   'fullscreen',
   'bottom-right',
   'bottom-left',
@@ -20,6 +21,7 @@ export const subtitleStyleSchema = z.enum(['medical', 'minimal', 'social']);
 export const sceneSchema = z.object({
   id: z.string(),
   type: sceneTypeSchema,
+  title: z.string().min(1).optional(),
   text: z.string().min(1),
   durationInSeconds: z.number().positive(),
   slide: z.number().int().positive().optional(),
@@ -52,5 +54,6 @@ export const projectSchema = z.object({
 export type Scene = z.infer<typeof sceneSchema>;
 export type MedAvatarProject = z.infer<typeof projectSchema>;
 export type SceneType = z.infer<typeof sceneTypeSchema>;
+export type AvatarLayout = z.infer<typeof avatarLayoutSchema>;
 export type SubtitleMode = z.infer<typeof subtitleModeSchema>;
 export type SubtitleStyle = z.infer<typeof subtitleStyleSchema>;
