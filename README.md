@@ -7,9 +7,10 @@ AI-powered medical explainer video pipeline for **digital doctors + PPT/slides +
 ## Pipeline
 
 ```text
-script.md
+script.md + optional storyboard.overrides.json
    ↓
 scene.json
+   ├── id          stable scene identity for editing
    ├── title       visual title, not narrated
    └── text        narration
    ↓
@@ -44,6 +45,8 @@ For a doctor-led scene, the portrait video becomes the main `hero` visual. The s
 ## Implemented
 
 - `script.md -> scene.json` storyboard pipeline
+- optional stable `id=` directives for editor-safe scene identity
+- optional `storyboard.overrides.json` visual override layer keyed by stable scene ID
 - Markdown headings become visual `scene.title` values and are never sent to TTS
 - narration remains in `scene.text`
 - explicit `hero` presenter layout; legacy `fullscreen` is accepted as a `hero` alias
@@ -84,29 +87,30 @@ TTS_PROVIDER=mock AVATAR_PROVIDER=mock pnpm demo
 
 ## Script scene directives
 
-A Markdown heading is attached to the next narration scene as its visual title:
+A Markdown heading is attached to the next narration scene as its visual title. Give scenes explicit IDs when they will be edited later:
 
 ```md
 # 高血压为什么会伤害血管
 
-<!-- medavatar:type=doctor_full avatar=hero subtitle=karaoke subtitle_style=medical -->
+<!-- medavatar:id=intro type=doctor_full avatar=hero subtitle=karaoke subtitle_style=medical -->
 很多高血压患者并没有明显的不舒服。
 
-<!-- medavatar:type=doctor_ppt slide=1 avatar=bottom-right scale=0.28 subtitle_style=minimal keywords=血压,血管 -->
+<!-- medavatar:id=vessel-pressure type=doctor_ppt slide=1 avatar=bottom-right scale=0.28 subtitle_style=minimal keywords=血压,血管 -->
 持续升高的血压，会让血管壁长期承受更大的机械压力。
 
 ## 家庭血压管理
 
-<!-- medavatar:type=doctor_full avatar=hero -->
+<!-- medavatar:id=home-monitoring type=doctor_full avatar=hero -->
 如果已经发现血压升高，建议记录家庭血压。
 ```
 
-The headings above are visual metadata only. ElevenLabs receives only the narration paragraphs.
+The headings above are visual metadata only. ElevenLabs receives only the narration paragraphs. Scene IDs accept letters, numbers, underscores and hyphens. IDs must be unique. When `id=` is omitted, the legacy `scene-001` style fallback is still generated.
 
 Supported directive fields:
 
 | Field | Values / example |
 | --- | --- |
+| `id` | stable scene identity, e.g. `id=vessel-pressure` |
 | `type` | `doctor_full`, `doctor_ppt`, `medical_animation`, `visual_full` |
 | `slide` | `slide=2` |
 | `avatar` | `hero`, `bottom-right`, `bottom-left`, `hidden`; `fullscreen` remains a legacy alias for `hero` |
@@ -116,6 +120,29 @@ Supported directive fields:
 | `animation` | `artery-pressure`, `plaque-growth`, `heart-beat`, `risk-pathway` |
 | `keywords` | `keywords=血管内皮,血压,压力` |
 | `duration` | optional estimate override, e.g. `duration=8` |
+
+## Storyboard visual overrides
+
+Do not hand-edit `output/scene.json`; it is generated and may be replaced whenever the storyboard stage runs. Put durable visual edits in `projects/<project>/storyboard.overrides.json` instead. The file is keyed by stable scene ID and is merged after `script.md` is parsed.
+
+```json
+{
+  "version": "1.0",
+  "scenes": {
+    "vessel-pressure": {
+      "avatar": {
+        "layout": "bottom-left",
+        "scale": 0.32
+      },
+      "subtitle": {
+        "style": "minimal"
+      }
+    }
+  }
+}
+```
+
+The override layer can change scene type/title, slide, avatar layout/scale, subtitle mode/style/keywords and animation metadata. It intentionally cannot change narration text or duration, preserving the audio-master timeline. Set `title`, `slide` or `animation` to `null` when that visual element should be removed. Overrides that reference an unknown scene ID are ignored with a warning.
 
 ## Avatar presentation
 
@@ -248,7 +275,7 @@ pnpm medavatar build demo
 
 The next product layer is mainly editing and production ergonomics:
 
-1. PPT page/scene visual editor
+1. PPT page/scene visual editor backed by `storyboard.overrides.json`
 2. title-template and motion presets
 3. terminology pronunciation controls
 4. larger reviewed medical-animation catalog
