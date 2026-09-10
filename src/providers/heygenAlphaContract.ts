@@ -49,7 +49,9 @@ const withMockHeyGen = async (video: Buffer, callback: () => Promise<void>) => {
       });
     }
     if (url === 'https://download.test/avatar.webm') {
-      return new Response(video, {status: 200, headers: {'content-type': 'video/webm'}});
+      const body = new Uint8Array(video.byteLength);
+      body.set(video);
+      return new Response(body.buffer, {status: 200, headers: {'content-type': 'video/webm'}});
     }
     throw new Error(`Unexpected fetch in HeyGen Alpha contract: ${url}`);
   }) as typeof fetch;
