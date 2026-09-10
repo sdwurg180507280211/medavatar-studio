@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import {spawn} from 'node:child_process';
-import {copyFile, readFile, readdir, rename, rm} from 'node:fs/promises';
+import {copyFile, readFile, readdir, rm} from 'node:fs/promises';
 import path from 'node:path';
 import {Command} from 'commander';
 import {ProxyAgent, setGlobalDispatcher} from 'undici';
@@ -23,6 +23,8 @@ import {scriptToStoryboard} from './storyboard.js';
 
 const program = new Command();
 program.name('medavatar').description('MedAvatar Studio CLI').version('0.3.0');
+
+const AVATAR_PRESENTATION_CACHE_VERSION = 'full-frame-v1';
 
 type CacheFile = Record<string, string | undefined>;
 type AvatarStrategy = 'single' | 'chaptered';
@@ -220,21 +222,37 @@ const renderSingleAvatar = async (
   await rm(paths.avatarChapters, {recursive: true, force: true});
   await rm(paths.audioChapters, {recursive: true, force: true});
   const audio = await readFile(audioPath);
-  const key = sha256(Buffer.concat([audio, Buffer.from(`|single|${avatarId}|${config.avatar.resolution}`)]));
+  const identity = `single|${avatarId}|${config.avatar.resolution}`;
+  const key = sha256(Buffer.concat([audio, Buffer.from(`|${identity}|${AVATAR_PRESENTATION_CACHE_VERSION}`)]));
+  const legacyKey = sha256(Buffer.concat([audio, Buffer.from(`|${identity}`)]));
+  const legacyRaw = path.join(paths.output, 'avatar-raw.webm');
   const cache = await readCache(paths.cache);
+
   if (cache.avatar === key && await fileExists(paths.avatar)) {
     console.log(`✓ avatar cache hit -> ${path.relative(process.cwd(), paths.avatar)}`);
     return paths.avatar;
   }
+
+  // v0.3 briefly generated a matted/cropped avatar.webm while keeping the
+  // original HeyGen frame as avatar-raw.webm. Promote that paid raw asset to
+  // the new full-frame source instead of calling HeyGen again.
+  if (cache.avatar === legacyKey && await fileExists(legacyRaw)) {
+    await copyFile(legacyRaw, paths.avatar);
+    await rm(legacyRaw, {force: true});
+    await patchCache(paths.cache, {avatar: key});
+    console.log(`✓ migrated full-frame avatar -> ${path.relative(process.cwd(), paths.avatar)}`);
+    return paths.avatar;
+  }
+
   const provider = new HeyGenAvatarProvider(requiredEnv('HEYGEN_API_KEY'), avatarId, {
     resolution: config.avatar.resolution,
     pollIntervalMs: config.avatar.pollIntervalMs,
     timeoutMs: config.avatar.timeoutMs,
   });
-  await provider.render({audioPath, outputPath: paths.avatarRaw, title: config.title});
-  await ensureTransparentAvatar(paths.avatarRaw, paths.avatar);
+  await provider.render({audioPath, outputPath: paths.avatar, title: config.title});
+  await rm(legacyRaw, {force: true});
   await patchCache(paths.cache, {avatar: key});
-  console.log(`✓ heygen avatar -> ${path.relative(process.cwd(), paths.avatar)}`);
+  console.log(`✓ heygen full-frame avatar -> ${path.relative(process.cwd(), paths.avatar)}`);
   return paths.avatar;
 };
 
@@ -288,7 +306,7 @@ const renderChapteredAvatar = async (
         title: `${config.title} · ${chapter.id}`,
       });
       completed.push({...chapter, hash, videoFile});
-      console.log(`✓ ${chapter.id} heygen avatar`);
+      console.log(`✓ ${chapter.id} heygen full-frame avatar`);
     }
     await writeJson(paths.avatarManifest, {strategy: 'chaptered', chapters: completed} satisfies AvatarChapterManifest);
   }
@@ -298,7 +316,7 @@ const renderChapteredAvatar = async (
     if (file.endsWith('.webm') && !keep.has(file)) await rm(path.join(paths.avatarChapters, file), {force: true});
   }
   await patchCache(paths.cache, {avatar: globalKey});
-  console.log(`✓ chaptered heygen avatar -> ${completed.length} chapters`);
+  console.log(`✓ chaptered heygen avatar -> ${completed.length} full-frame chapters`);
   return paths.avatarManifest;
 };
 
@@ -308,6 +326,7 @@ const avatar = async (projectName: string) => {
   const strategy = envProvider<AvatarStrategy>('AVATAR_STRATEGY', config.avatar.strategy, ['single', 'chaptered'] as const);
   if (name === 'mock') {
     await rm(paths.avatar, {force: true});
+    await rm(path.join(paths.output, 'avatar-raw.webm'), {force: true});
     await rm(paths.avatarManifest, {force: true});
     await rm(paths.avatarChapters, {recursive: true, force: true});
     await rm(paths.audioChapters, {recursive: true, force: true});
@@ -402,34 +421,6 @@ const run = (command: string, args: string[]) => new Promise<void>((resolve, rej
   child.on('exit', (code) => code === 0 ? resolve() : reject(new Error(`${command} exited with ${code}`)));
   child.on('error', reject);
 });
-
-const capture = (command: string, args: string[]) => new Promise<string>((resolve, reject) => {
-  const child = spawn(command, args, {shell: process.platform === 'win32'});
-  let stdout = '';
-  child.stdout.on('data', (chunk) => (stdout += chunk));
-  child.on('exit', (code) => code === 0 ? resolve(stdout) : reject(new Error(`${command} exited with ${code}`)));
-  child.on('error', reject);
-});
-
-const hasAlphaChannel = async (video: string) => {
-  try {
-    const out = await capture('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=pix_fmt', '-of', 'default=nw=1:nk=1', video]);
-    return out.trim().includes('yuva');
-  } catch {
-    return false;
-  }
-};
-
-// HeyGen instant avatars are trained without matting, so the API keeps the
-// recorded background. Matte the presenter locally into a real alpha webm.
-const ensureTransparentAvatar = async (raw: string, output: string) => {
-  if (await hasAlphaChannel(raw)) {
-    await rename(raw, output);
-    console.log('✓ avatar already has alpha channel');
-    return;
-  }
-  await run('python3', [path.resolve('scripts/matte_avatar.py'), raw, output]);
-};
 
 const render = async (projectName: string) => {
   const paths = await prepareRenderProps(projectName);
