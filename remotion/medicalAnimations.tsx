@@ -42,9 +42,65 @@ const Shell: React.FC<{scene: Scene; title: string; children: React.ReactNode}> 
   );
 };
 
+const PortraitArteryPressure: React.FC<{scene: Scene}> = ({scene}) => {
+  const frame = useCurrentFrame();
+  const {fps, width, height} = useVideoConfig();
+  const metrics = getCompositionLayout(width, height);
+  const rect = getVisualPanelRect(width, height, 'medical_animation', getSceneAvatarLayout(scene));
+  const enter = spring({fps, frame, config:{damping:19, stiffness:92}});
+  const vesselEnter = spring({fps, frame, delay:Math.round(fps*0.38), config:{damping:18, stiffness:104}});
+  const loadEnter = spring({fps, frame, delay:Math.round(fps*1.25), config:{damping:17, stiffness:118}});
+  const beat = 1 + Math.sin((frame / fps) * Math.PI * 2) * 0.035;
+  const flow = (frame * Math.max(5, Math.round(8*metrics.unit))) % Math.max(1, rect.width * 0.88);
+  const pad = Math.round(rect.width * 0.055);
+  const titleSize = Math.round(38 * metrics.unit);
+  const vesselTop = Math.round(rect.height * 0.39);
+  const vesselHeight = Math.round(rect.height * 0.27);
+  const vesselLeft = pad;
+  const vesselWidth = rect.width - pad * 2;
+  const chipTop = Math.round(rect.height * 0.77);
+  const chipGap = Math.round(12 * metrics.unit);
+  const chipWidth = Math.floor((vesselWidth - chipGap * 2) / 3);
+  const pressureTravel = Math.round(22 * metrics.unit);
+
+  return (
+    <div style={{position:'absolute', left:rect.left, top:rect.top, width:rect.width, height:rect.height, overflow:'visible', fontFamily:'"Noto Sans CJK SC", "PingFang SC", "Microsoft YaHei", sans-serif'}}>
+      <div style={{position:'absolute', inset:0, borderRadius:Math.round(42*metrics.unit), overflow:'hidden', background:'linear-gradient(180deg, rgba(21,68,91,.36) 0%, rgba(7,24,38,.08) 100%)', border:'1px solid rgba(99,229,231,.12)', opacity:enter}}>
+        <div style={{position:'absolute', width:Math.round(rect.width*0.82), aspectRatio:'1', left:'50%', top:'46%', transform:'translate(-50%,-50%)', borderRadius:'50%', background:'radial-gradient(circle, rgba(49,200,216,.16) 0%, rgba(42,116,255,.07) 42%, rgba(7,24,38,0) 73%)'}} />
+        <div style={{position:'absolute', left:pad, top:Math.round(rect.height*0.085), color:'rgba(99,229,231,.78)', fontSize:Math.round(18*metrics.unit), fontWeight:760, letterSpacing:Math.round(4*metrics.unit)}}>血管机制</div>
+        <div style={{position:'absolute', left:pad, right:pad, top:Math.round(rect.height*0.145), color:'#F3FAFD', fontSize:titleSize, lineHeight:1.18, fontWeight:860, textShadow:'0 8px 24px rgba(0,0,0,.28)'}}>持续高压如何作用于血管壁</div>
+
+        <div style={{position:'absolute', left:vesselLeft, top:vesselTop, width:vesselWidth, height:vesselHeight, borderRadius:999, background:'linear-gradient(180deg,#D85F69 0%,#B84956 100%)', boxShadow:'0 22px 60px rgba(231,101,107,.18)', transform:`scaleX(${interpolate(vesselEnter,[0,1],[0.86,1])}) scaleY(${beat})`, transformOrigin:'center'}}>
+          <div style={{position:'absolute', left:Math.round(vesselHeight*0.19), right:Math.round(vesselHeight*0.19), top:Math.round(vesselHeight*0.2), bottom:Math.round(vesselHeight*0.2), borderRadius:999, overflow:'hidden', background:'linear-gradient(180deg,#AEE6F7 0%,#79CBE8 100%)', boxShadow:'inset 0 0 24px rgba(255,255,255,.24)'}}>
+            {Array.from({length:7}).map((_,index) => {
+              const diameter = Math.round(vesselHeight * 0.19);
+              const travel = vesselWidth * 0.86;
+              return <div key={index} style={{position:'absolute', width:diameter, height:diameter, borderRadius:'50%', background:'rgba(255,255,255,.92)', top:Math.round(vesselHeight*0.06)+(index%2)*Math.round(vesselHeight*0.2), left:((index*travel/6+flow)%travel)-diameter, boxShadow:'0 3px 12px rgba(42,116,255,.13)'}} />;
+            })}
+          </div>
+        </div>
+
+        <div style={{position:'absolute', left:'50%', top:vesselTop-Math.round(62*metrics.unit), transform:'translateX(-50%)', color:'#FF7A82', fontSize:Math.round(54*metrics.unit), fontWeight:950, opacity:loadEnter}}>↑</div>
+        <div style={{position:'absolute', left:'50%', top:vesselTop+vesselHeight+Math.round(4*metrics.unit), transform:'translateX(-50%)', color:'#FF7A82', fontSize:Math.round(54*metrics.unit), fontWeight:950, opacity:loadEnter}}>↓</div>
+        <div style={{position:'absolute', left:'50%', top:vesselTop-Math.round(34*metrics.unit), width:Math.round(rect.width*0.5), height:2, transform:`translateX(-50%) translateY(${interpolate(loadEnter,[0,1],[-pressureTravel,0])}px)`, background:'linear-gradient(90deg,rgba(255,122,130,0),rgba(255,122,130,.58),rgba(255,122,130,0))', opacity:loadEnter}} />
+
+        {[
+          ['血流压力增加','rgba(42,116,255,.13)','#BFE7FF'],
+          ['血管壁负荷 ↑','rgba(231,101,107,.16)','#FFB9BE'],
+          ['内皮持续受力','rgba(99,229,231,.12)','#B9F4EE'],
+        ].map(([label,background,color],index) => (
+          <div key={label} style={{position:'absolute', left:vesselLeft+index*(chipWidth+chipGap), top:chipTop, width:chipWidth, minHeight:Math.round(58*metrics.unit), boxSizing:'border-box', display:'flex', alignItems:'center', justifyContent:'center', padding:`${Math.round(12*metrics.unit)}px ${Math.round(10*metrics.unit)}px`, borderRadius:Math.round(18*metrics.unit), background, border:'1px solid rgba(255,255,255,.08)', color, textAlign:'center', fontSize:Math.round(20*metrics.unit), lineHeight:1.28, fontWeight:760, opacity:loadEnter, transform:`translateY(${interpolate(loadEnter,[0,1],[Math.round(16*metrics.unit),0])}px)`}}>{label}</div>
+        ))}
+      </div>
+      <div style={{position:'absolute', left:0, right:0, top:rect.height+Math.round(16*metrics.unit), textAlign:'center', color:'rgba(219,235,246,.62)', fontSize:Math.round(19*metrics.unit), fontWeight:650, letterSpacing:Math.round(metrics.unit)}}>医学机制示意</div>
+    </div>
+  );
+};
+
 const ArteryPressure: React.FC<{scene: Scene}> = ({scene}) => {
   const frame = useCurrentFrame();
-  const {fps} = useVideoConfig();
+  const {fps, width, height} = useVideoConfig();
+  if (height > width) return <PortraitArteryPressure scene={scene} />;
   const beat = 1 + Math.sin((frame / fps) * Math.PI * 2) * 0.045;
   const flow = (frame * 9) % 930;
   const arrow = spring({fps, frame:frame - Math.round(fps * 0.35), config:{damping:18}});
