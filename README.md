@@ -38,7 +38,7 @@ final.mp4
 
 The Digital Twin base is portrait, so MedAvatar treats **9:16 as the source and default output format**. HeyGen always renders portrait footage, and Remotion composes the final video on the same 1080×1920 canvas. A landscape project remains possible by setting explicit `video.width` and `video.height` values in `project.json`.
 
-There is no default transparent-background or person-matting step. For PPT and medical-animation scenes, the original portrait video is displayed through a circular Remotion mask using `overflow: hidden` and `object-fit: cover`.
+HeyGen WebM output is requested as the transparent-avatar source. When the selected Avatar supports matting, HeyGen marks the VP9 WebM with Alpha and Remotion must pass `transparent` to `OffthreadVideo` so the Alpha survives frame extraction. For PPT and medical-animation scenes, the transparent portrait video is then displayed through a circular Remotion mask using `overflow: hidden` and `object-fit: cover`.
 
 For a doctor-led scene, the portrait video becomes the main `hero` visual. The scene title animates above it with a presentation-style entrance instead of placing narration in a mechanical left/right split.
 

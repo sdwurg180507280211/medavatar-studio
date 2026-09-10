@@ -178,7 +178,7 @@ const AvatarClip: React.FC<{
         overflow:'hidden',
         border:`${metrics.pip.border}px solid rgba(255,255,255,.96)`,
         boxShadow:'0 18px 54px rgba(0,0,0,.38)',
-        background:'#071826',
+        background:'transparent',
       }
     : {
         position:'absolute',
@@ -201,11 +201,12 @@ const AvatarClip: React.FC<{
         objectFit:'cover',
         objectPosition:'50% 0%',
         mixBlendMode:'lighten',
+        filter:'drop-shadow(0 28px 70px rgba(0,0,0,.34))',
       };
 
   return (
     <div style={{...wrapper, opacity, transform:`scale(${interpolate(enter,[0,1],[0.975,1])})`, transformOrigin:pip ? 'center' : 'bottom center', display:'flex', alignItems:'center', justifyContent:'center', zIndex:20}}>
-      {avatarSrc ? <OffthreadVideo src={staticFile(avatarSrc)} muted style={videoStyle} /> : <MockDoctor />}
+      {avatarSrc ? <OffthreadVideo src={staticFile(avatarSrc)} muted transparent style={videoStyle} /> : <MockDoctor />}
     </div>
   );
 };
