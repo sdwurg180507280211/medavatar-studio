@@ -37,6 +37,10 @@ jobs:
           pnpm portrait:preview portrait-demo --scene vascular-pressure --dry-run
           pnpm portrait:still portrait-demo --scene silent-risk --at 1.2 --dry-run
           pnpm portrait:render portrait-demo --dry-run
+      - name: Fast preview render smoke
+        run: |
+          pnpm portrait:preview portrait-demo --frames 0-9 --scale 0.25 --concurrency 50% --output /tmp/portrait-preview.mp4
+          test -s /tmp/portrait-preview.mp4
       - name: Layout invariants
         run: |
           pnpm exec tsx -e "import {getCompositionLayout,getPipSize,getSubtitlePlacement,getVisualPanelRect} from './remotion/layout.ts'; const cases=[[1920,1080],[1080,1920],[1280,720],[720,1280],[1440,1440]]; for(const [w,h] of cases){const l=getCompositionLayout(w,h); const rects=[getVisualPanelRect(w,h,'visual_full','hidden'),getVisualPanelRect(w,h,'medical_animation','bottom-right')]; for(const r of rects){if(r.left<0||r.top<0||r.width<=0||r.height<=0||r.left+r.width>w||r.top+r.height>h) process.exit(1);} if(l.hero.top<0||l.hero.width>w||l.hero.top+l.hero.height>h) process.exit(1); const pip=getPipSize(w,h,0.28); const sub=getSubtitlePlacement(w,h,'bottom-right',pip); if(sub.left<0||sub.right<0||sub.bottom<0||sub.left+sub.right>=w) process.exit(1); if(l.portrait&&sub.bottom<l.pip.margin+pip) process.exit(1); }"
