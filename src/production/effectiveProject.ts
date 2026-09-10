@@ -24,6 +24,10 @@ export type EffectiveProjectState = StoryboardProjectState & {
   timeline: TimelineState;
 };
 
+export type EffectiveProjectOptions = {
+  overrides?: StoryboardOverrides;
+};
+
 const EMPTY_OVERRIDES: StoryboardOverrides = {version: '1.0', scenes: {}};
 
 const defaultLayoutForType = (type: SceneType) => {
@@ -103,13 +107,17 @@ export const loadBaseProject = async (projectName: string) => {
   return {projectName, paths, config, base};
 };
 
-export const loadStoryboardProject = async (projectName: string): Promise<StoryboardProjectState> => {
-  const {paths, config, base} = await loadBaseProject(projectName);
-  const overrides = await readOverrides(paths.overrides);
-  const applied = applyStoryboardOverrides(base, overrides);
+export const resolveStoryboardProject = (
+  projectName: string,
+  config: ProjectConfig,
+  base: MedAvatarProject,
+  overrides: StoryboardOverrides,
+): StoryboardProjectState => {
+  const parsedOverrides = storyboardOverridesSchema.parse(overrides);
+  const applied = applyStoryboardOverrides(base, parsedOverrides);
   const scenes = applied.project.scenes.map((scene, index) => {
     const baseScene = base.scenes[index];
-    const override = overrides.scenes[scene.id];
+    const override = parsedOverrides.scenes[scene.id];
     const typeChanged = Boolean(override?.type && override.type !== baseScene?.type);
     return resolveScenePresentation(scene, {
       typeChanged,
@@ -121,14 +129,26 @@ export const loadStoryboardProject = async (projectName: string): Promise<Storyb
     projectName,
     config,
     base,
-    overrides,
+    overrides: parsedOverrides,
     effective: projectSchema.parse({...applied.project, scenes}),
     orphanSceneIds: applied.orphanSceneIds,
   };
 };
 
-export const loadEffectiveProject = async (projectName: string): Promise<EffectiveProjectState> => {
-  const state = await loadStoryboardProject(projectName);
+export const loadStoryboardProject = async (
+  projectName: string,
+  options: EffectiveProjectOptions = {},
+): Promise<StoryboardProjectState> => {
+  const {paths, config, base} = await loadBaseProject(projectName);
+  const overrides = options.overrides ?? await readOverrides(paths.overrides);
+  return resolveStoryboardProject(projectName, config, base, overrides);
+};
+
+export const loadEffectiveProject = async (
+  projectName: string,
+  options: EffectiveProjectOptions = {},
+): Promise<EffectiveProjectState> => {
+  const state = await loadStoryboardProject(projectName, options);
   const paths = projectPaths(projectName);
   if (!(await fileExists(paths.timing))) {
     return {...state, timeline: {source: 'estimated', stale: false}};

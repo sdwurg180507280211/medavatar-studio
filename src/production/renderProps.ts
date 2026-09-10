@@ -1,5 +1,6 @@
 import {captionCuesFromAlignment, captionCuesFromSceneDurations, type CaptionCue} from '../core/captions.js';
 import {fileExists, projectPaths, readText, writeJson} from '../core/io.js';
+import type {StoryboardOverrides} from '../core/overrides.js';
 import type {CharacterAlignment} from '../providers/types.js';
 import {resolveProjectAssets, stageProjectAssets, type RenderAssets} from './assets.js';
 import {loadEffectiveProject, type EffectiveProjectState} from './effectiveProject.js';
@@ -7,6 +8,10 @@ import {loadEffectiveProject, type EffectiveProjectState} from './effectiveProje
 export type EditorProjectPayload = EffectiveProjectState & {
   assets: RenderAssets;
   captions: CaptionCue[];
+};
+
+export type PreviewPropsOptions = {
+  overrides?: StoryboardOverrides;
 };
 
 const loadResolvedCaptions = async (state: EffectiveProjectState) => {
@@ -23,8 +28,11 @@ const loadResolvedCaptions = async (state: EffectiveProjectState) => {
   return captionCuesFromSceneDurations(state.effective.scenes);
 };
 
-export const loadPreviewProps = async (projectName: string): Promise<EditorProjectPayload> => {
-  const state = await loadEffectiveProject(projectName);
+export const loadPreviewProps = async (
+  projectName: string,
+  options: PreviewPropsOptions = {},
+): Promise<EditorProjectPayload> => {
+  const state = await loadEffectiveProject(projectName, options);
   const includeTimedMedia = state.timeline.source === 'actual';
   const [assets, captions] = await Promise.all([
     resolveProjectAssets(projectName, {includeTimedMedia}),

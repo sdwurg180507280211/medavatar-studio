@@ -35,6 +35,7 @@ jobs:
           node -e "const c=require('./projects/demo/output/chapters.json'); if(!Array.isArray(c)||c.length<1||c.some(x=>x.duration<=0)) process.exit(1)"
           pnpm exec tsx -e "import {scriptToStoryboard} from './src/storyboard.ts'; let ok=false; try { scriptToStoryboard('x', '<!-- medavatar:id=same -->\\n甲\\n\\n<!-- medavatar:id=same -->\\n乙'); } catch (error) { ok=String(error).includes('Duplicate medavatar scene id'); } if (!ok) process.exit(1);"
           pnpm exec tsx -e "import {loadPreviewProps} from './src/production/renderProps.ts'; const run=async()=>{const p=await loadPreviewProps('demo'); if(p.timeline.source!=='actual'||p.timeline.stale||p.effective.scenes[2]?.subtitle?.style!=='social'||!Array.isArray(p.captions)||p.captions.length<2) process.exit(1);}; run();"
+          pnpm exec tsx -e "import {setSceneSubtitleStyle} from './src/editor/overrideDraft.ts'; const input={version:'1.0',scenes:{x:{subtitle:{mode:'karaoke',style:'social'},avatar:{scale:0.4}}}}; const changed=setSceneSubtitleStyle(input,'x','minimal'); const reset=setSceneSubtitleStyle(changed,'x',undefined); if(changed.scenes.x?.subtitle?.style!=='minimal'||changed.scenes.x?.avatar?.scale!==0.4||reset.scenes.x?.subtitle?.style!==undefined||reset.scenes.x?.subtitle?.mode!=='karaoke'||input.scenes.x?.subtitle?.style!=='social') process.exit(1);"
       - name: Editor server smoke test
         run: |
           CI=true pnpm medavatar editor demo > /tmp/medavatar-editor.log 2>&1 &
@@ -50,3 +51,20 @@ jobs:
           curl -fsS http://127.0.0.1:4173/ -o /tmp/editor-index.html
           curl -fsS http://127.0.0.1:4173/src/App.tsx -o /dev/null
           node -e "const p=require('/tmp/editor-project.json'); if(p.projectName!=='demo'||p.timeline?.source!=='actual'||!Array.isArray(p.effective?.scenes)||p.effective.scenes.length<1) process.exit(1)"
+
+          curl -fsS -X POST \
+            -H 'Content-Type: application/json' \
+            --data '{"version":"1.0","scenes":{"vascular-injury":{"subtitle":{"style":"minimal"}}}}' \
+            http://127.0.0.1:4173/api/projects/demo/resolve \
+            -o /tmp/editor-resolved.json
+          node -e "const p=require('/tmp/editor-resolved.json'); if(p.overrides?.scenes?.['vascular-injury']?.subtitle?.style!=='minimal'||p.effective?.scenes?.find(x=>x.id==='vascular-injury')?.subtitle?.style!=='minimal'||p.timeline?.source!=='actual') process.exit(1)"
+
+          cp projects/demo/storyboard.overrides.json /tmp/demo-overrides.json
+          curl -fsS -X PUT \
+            -H 'Content-Type: application/json' \
+            --data '{"version":"1.0","scenes":{"vascular-injury":{"subtitle":{"style":"minimal"}}}}' \
+            http://127.0.0.1:4173/api/projects/demo/overrides \
+            -o /tmp/editor-saved.json
+          node -e "const p=require('/tmp/editor-saved.json'); if(p.overrides?.scenes?.['vascular-injury']?.subtitle?.style!=='minimal'||p.effective?.scenes?.find(x=>x.id==='vascular-injury')?.subtitle?.style!=='minimal') process.exit(1)"
+          node -e "const p=require('./projects/demo/storyboard.overrides.json'); if(p.scenes?.['vascular-injury']?.subtitle?.style!=='minimal') process.exit(1)"
+          cp /tmp/demo-overrides.json projects/demo/storyboard.overrides.json

@@ -1,12 +1,15 @@
 import {createReadStream} from 'node:fs';
 import {stat} from 'node:fs/promises';
 import path from 'node:path';
-import type {ServerResponse} from 'node:http';
+import type {IncomingMessage, ServerResponse} from 'node:http';
 import {createServer as createViteServer, type Plugin} from 'vite';
+import {projectPaths, writeJson} from '../core/io.js';
+import {storyboardOverridesSchema} from '../core/overrides.js';
 import {loadPreviewProps} from '../production/renderProps.js';
 import {resolveGeneratedAssetSource} from '../production/assets.js';
 
 const PROJECT_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+const MAX_JSON_BYTES = 1024 * 1024;
 
 const contentTypeFor = (file: string) => {
   if (file.endsWith('.png')) return 'image/png';
@@ -22,18 +25,56 @@ const sendJson = (res: ServerResponse, status: number, value: unknown) => {
   res.end(`${JSON.stringify(value)}\n`);
 };
 
+const readJsonBody = async (req: IncomingMessage) => {
+  const chunks: Buffer[] = [];
+  let bytes = 0;
+  for await (const chunk of req) {
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    bytes += buffer.length;
+    if (bytes > MAX_JSON_BYTES) throw new Error('Request body is too large.');
+    chunks.push(buffer);
+  }
+  if (chunks.length === 0) throw new Error('Request body is required.');
+  return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;
+};
+
+const parseOverridesBody = async (req: IncomingMessage) =>
+  storyboardOverridesSchema.parse(await readJsonBody(req));
+
 const editorApiPlugin = (projectName: string): Plugin => ({
   name: 'medavatar-editor-api',
   configureServer(server) {
     server.middlewares.use(async (req, res, next) => {
       if (!req.url) return next();
       const url = new URL(req.url, 'http://localhost');
-      const expectedApi = `/api/projects/${encodeURIComponent(projectName)}`;
-      if (req.method === 'GET' && url.pathname === expectedApi) {
+      const projectApi = `/api/projects/${encodeURIComponent(projectName)}`;
+
+      if (req.method === 'GET' && url.pathname === projectApi) {
         try {
           sendJson(res, 200, await loadPreviewProps(projectName));
         } catch (error) {
           sendJson(res, 500, {error: error instanceof Error ? error.message : String(error)});
+        }
+        return;
+      }
+
+      if (req.method === 'POST' && url.pathname === `${projectApi}/resolve`) {
+        try {
+          const overrides = await parseOverridesBody(req);
+          sendJson(res, 200, await loadPreviewProps(projectName, {overrides}));
+        } catch (error) {
+          sendJson(res, 400, {error: error instanceof Error ? error.message : String(error)});
+        }
+        return;
+      }
+
+      if (req.method === 'PUT' && url.pathname === `${projectApi}/overrides`) {
+        try {
+          const overrides = await parseOverridesBody(req);
+          await writeJson(projectPaths(projectName).overrides, overrides);
+          sendJson(res, 200, await loadPreviewProps(projectName));
+        } catch (error) {
+          sendJson(res, 400, {error: error instanceof Error ? error.message : String(error)});
         }
         return;
       }
