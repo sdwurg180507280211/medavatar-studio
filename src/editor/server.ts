@@ -86,7 +86,7 @@ export const startEditorServer = async (projectName: string, port = 4173) => {
       host: '127.0.0.1',
       port,
       strictPort: true,
-      open: `/?project=${encodeURIComponent(projectName)}`,
+      open: process.env.CI ? false : `/?project=${encodeURIComponent(projectName)}`,
       fs: {allow: [path.resolve('.')]},
     },
   });
