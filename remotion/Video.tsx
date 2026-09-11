@@ -102,23 +102,29 @@ const MockDoctor: React.FC = () => (
 
 const activeScene = (project: MedAvatarProject, frame: number) => {
   let cursor = 0;
-  for (const scene of project.scenes) {
-    const duration = Math.max(1, Math.round(scene.durationInSeconds * project.video.fps));
-    if (frame < cursor + duration) return {scene, localFrame: frame - cursor};
-    cursor += duration;
+  for (let index = 0; index < project.scenes.length; index += 1) {
+    const scene = project.scenes[index];
+    const durationInFrames = Math.max(1, Math.round(scene.durationInSeconds * project.video.fps));
+    if (frame < cursor + durationInFrames) {
+      return {
+        scene,
+        index,
+        startFrame: cursor,
+        localFrame: frame - cursor,
+        durationInFrames,
+      };
+    }
+    cursor += durationInFrames;
   }
-  return {scene: project.scenes.at(-1)!, localFrame: 0};
+  const index = Math.max(0, project.scenes.length - 1);
+  const scene = project.scenes[index]!;
+  return {scene, index, startFrame: cursor, localFrame: 0, durationInFrames: 1};
 };
 
 const sceneMasksAvatarReset = (scene: Scene | undefined) => {
   if (!scene) return false;
   const layout = getSceneAvatarLayout(scene);
-  if (layout === 'hidden') return true;
-  return scene.type === 'visual_full'
-    || scene.type === 'doctor_ppt'
-    || scene.type === 'medical_animation'
-    || layout === 'bottom-left'
-    || layout === 'bottom-right';
+  return layout === 'hidden' || layout === 'bottom-left' || layout === 'bottom-right';
 };
 
 const shouldMaskBoundary = (project: MedAvatarProject, boundaryFrame: number) => {
@@ -147,6 +153,9 @@ const HeroTitle: React.FC<{scene: Scene}> = ({scene}) => {
   );
 };
 
+const isPipLayout = (layout: ReturnType<typeof getSceneAvatarLayout>) =>
+  layout === 'bottom-left' || layout === 'bottom-right';
+
 const AvatarClip: React.FC<{
   project: MedAvatarProject;
   avatarSrc?: string;
@@ -157,55 +166,102 @@ const AvatarClip: React.FC<{
   const {fps, width, height} = useVideoConfig();
   const metrics = getCompositionLayout(width, height);
   const globalFrame = clipFrame + globalStartFrame;
-  const {scene, localFrame} = activeScene(project, globalFrame);
+  const active = activeScene(project, globalFrame);
+  const {scene, localFrame, index} = active;
   const layout = getSceneAvatarLayout(scene);
   if (layout === 'hidden') return null;
 
-  const pip = layout === 'bottom-left' || layout === 'bottom-right';
-  const realHero = Boolean(avatarSrc) && !pip;
-  const pipSize = getPipSize(width, height, scene.avatar?.scale ?? 0.28);
+  const previousScene = index > 0 ? project.scenes[index - 1] : undefined;
+  const previousLayout = previousScene ? getSceneAvatarLayout(previousScene) : undefined;
+  const currentPip = isPipLayout(layout);
+  const previousPip = previousLayout ? isPipLayout(previousLayout) : false;
+  const transitionFrames = Math.max(6, Math.round(fps * 0.4));
+  const transitionProgress = interpolate(
+    localFrame,
+    [0, transitionFrames],
+    [0, 1],
+    {extrapolateLeft:'clamp', extrapolateRight:'clamp'},
+  );
+  const morphingHeroToPip = metrics.portrait && currentPip && previousLayout === 'hero';
+  const morphingPipToHero = metrics.portrait && layout === 'hero' && previousPip;
+  const pipMix = morphingHeroToPip
+    ? transitionProgress
+    : morphingPipToHero
+      ? 1 - transitionProgress
+      : currentPip ? 1 : 0;
+
+  const pipScene = currentPip ? scene : previousPip ? previousScene! : scene;
+  const pipLayout = currentPip
+    ? layout
+    : previousPip
+      ? previousLayout!
+      : 'bottom-right';
+  const pipSize = getPipSize(width, height, pipScene.avatar?.scale ?? 0.28);
+  const heroLeft = Math.round((width - metrics.hero.width) / 2);
+  const heroTop = metrics.hero.top;
+  const pipLeft = pipLayout === 'bottom-left'
+    ? metrics.pip.margin
+    : width - metrics.pip.margin - pipSize;
+  const pipTop = height - metrics.pip.margin - pipSize;
+
+  const rect = {
+    left: interpolate(pipMix, [0, 1], [heroLeft, pipLeft]),
+    top: interpolate(pipMix, [0, 1], [heroTop, pipTop]),
+    width: interpolate(pipMix, [0, 1], [metrics.hero.width, pipSize]),
+    height: interpolate(pipMix, [0, 1], [metrics.hero.height, pipSize]),
+  };
   const enter = spring({fps, frame:localFrame, config:{damping:18}});
-
-  const wrapper: React.CSSProperties = pip
-    ? {
-        position:'absolute',
-        width:pipSize,
-        height:pipSize,
-        bottom:metrics.pip.margin,
-        right:layout === 'bottom-right' ? metrics.pip.margin : undefined,
-        left:layout === 'bottom-left' ? metrics.pip.margin : undefined,
-        borderRadius:'50%',
-        overflow:'hidden',
-        border:`${metrics.pip.border}px solid rgba(255,255,255,.96)`,
-        boxShadow:'0 18px 54px rgba(0,0,0,.38)',
-        background:'transparent',
-      }
-    : {
-        position:'absolute',
-        top:metrics.hero.top,
-        height:metrics.hero.height,
-        width:metrics.hero.width,
-        left:'50%',
-        marginLeft:-Math.round(metrics.hero.width / 2),
-        borderRadius:`${metrics.hero.radius}px ${metrics.hero.radius}px 0 0`,
-        overflow:'hidden',
-        background:realHero ? 'transparent' : '#071826',
-        boxShadow:realHero ? 'none' : '0 28px 90px rgba(0,0,0,.34)',
-      };
-
-  const videoStyle: React.CSSProperties = pip
-    ? {width:'100%', height:'100%', objectFit:'cover', objectPosition:'50% 32%', transform:'scale(1.22)', transformOrigin:'50% 34%'}
-    : {
-        width:'100%',
-        height:'100%',
-        objectFit:'cover',
-        objectPosition:'50% 0%',
-        filter:'drop-shadow(0 28px 70px rgba(0,0,0,.34))',
-      };
+  const morphing = morphingHeroToPip || morphingPipToHero;
+  const enterScale = morphing ? 1 : interpolate(enter,[0,1],[0.975,1]);
+  const borderWidth = Math.round(metrics.pip.border * pipMix);
+  const radius = interpolate(pipMix, [0, 1], [metrics.hero.radius, pipSize / 2]);
+  const videoScale = interpolate(pipMix, [0, 1], [1, 1.22]);
+  const objectY = interpolate(pipMix, [0, 1], [0, 32]);
+  const heroShadowAlpha = 0.34 * (1 - pipMix);
+  const pipShadowAlpha = 0.38 * pipMix;
+  const realPresenter = Boolean(avatarSrc);
 
   return (
-    <div style={{...wrapper, opacity, transform:`scale(${interpolate(enter,[0,1],[0.975,1])})`, transformOrigin:pip ? 'center' : 'bottom center', display:'flex', alignItems:'center', justifyContent:'center', zIndex:20}}>
-      {avatarSrc ? <OffthreadVideo src={staticFile(avatarSrc)} muted transparent style={videoStyle} /> : <MockDoctor />}
+    <div
+      style={{
+        position:'absolute',
+        left:rect.left,
+        top:rect.top,
+        width:rect.width,
+        height:rect.height,
+        borderRadius:radius,
+        overflow:'hidden',
+        border:`${borderWidth}px solid rgba(255,255,255,.96)`,
+        boxSizing:'border-box',
+        boxShadow: realPresenter
+          ? `0 18px 54px rgba(0,0,0,${pipShadowAlpha})`
+          : `0 24px 70px rgba(0,0,0,${0.24 + 0.14 * pipMix})`,
+        background:realPresenter ? 'transparent' : '#071826',
+        opacity,
+        transform:`scale(${enterScale})`,
+        transformOrigin:pipMix > 0.5 ? 'center' : 'bottom center',
+        display:'flex',
+        alignItems:'center',
+        justifyContent:'center',
+        zIndex:20,
+      }}
+    >
+      {avatarSrc ? (
+        <OffthreadVideo
+          src={staticFile(avatarSrc)}
+          muted
+          transparent
+          style={{
+            width:'100%',
+            height:'100%',
+            objectFit:'cover',
+            objectPosition:`50% ${objectY}%`,
+            transform:`scale(${videoScale})`,
+            transformOrigin:`50% ${interpolate(pipMix,[0,1],[0,34])}%`,
+            filter:`drop-shadow(0 28px 70px rgba(0,0,0,${heroShadowAlpha}))`,
+          }}
+        />
+      ) : <MockDoctor />}
     </div>
   );
 };
