@@ -17,6 +17,7 @@ import type {PortraitPrototypeVisuals} from '../src/production/portraitPrototype
 import {
   getCompositionLayout,
   getPipSize,
+  getRenderedAvatarLayout,
   getSceneAvatarLayout,
   getSubtitlePlacement,
   getVisualPanelRect,
@@ -168,11 +169,11 @@ const AvatarClip: React.FC<{
   const globalFrame = clipFrame + globalStartFrame;
   const active = activeScene(project, globalFrame);
   const {scene, localFrame, index} = active;
-  const layout = getSceneAvatarLayout(scene);
+  const layout = getRenderedAvatarLayout(scene, width, height);
   if (layout === 'hidden') return null;
 
   const previousScene = index > 0 ? project.scenes[index - 1] : undefined;
-  const previousLayout = previousScene ? getSceneAvatarLayout(previousScene) : undefined;
+  const previousLayout = previousScene ? getRenderedAvatarLayout(previousScene, width, height) : undefined;
   const currentPip = isPipLayout(layout);
   const previousPip = previousLayout ? isPipLayout(previousLayout) : false;
   const transitionFrames = Math.max(6, Math.round(fps * 0.4));
@@ -308,7 +309,7 @@ const SubtitleTrack: React.FC<{project: MedAvatarProject; captions: CaptionCue[]
   const metrics = getCompositionLayout(width, height);
   const base = subtitlePresets[scene.subtitle?.style ?? 'medical'];
   const cue = captions.find((candidate) => candidate.sceneId === scene.id && time >= candidate.start - 0.02 && time < candidate.end + 0.06);
-  const avatarLayout = getSceneAvatarLayout(scene);
+  const avatarLayout = getRenderedAvatarLayout(scene, width, height);
   const pipSize = getPipSize(width, height, scene.avatar?.scale ?? 0.28);
   const position = getSubtitlePlacement(width, height, avatarLayout, pipSize);
   const characters = cue?.characters;
@@ -332,8 +333,9 @@ const Slide: React.FC<{scene: Scene; slideSrc?: string}> = ({scene, slideSrc}) =
   const rect = getVisualPanelRect(width, height, scene.type, getSceneAvatarLayout(scene));
   const progress = spring({fps, frame, config:{damping:18}});
   const fontScale = metrics.unit * (metrics.portrait ? 0.84 : 1);
+  const portraitSupport = metrics.portrait && scene.type === 'doctor_ppt';
   return (
-    <div style={{position:'absolute', left:rect.left, top:rect.top, width:rect.width, height:rect.height, borderRadius:Math.round(30*metrics.unit), background:palette.panel, boxShadow:'0 30px 90px rgba(0,0,0,.26)', overflow:'hidden', transform:`translateY(${interpolate(progress,[0,1],[Math.round(45*metrics.unit),0])}px)`, opacity:progress, color:palette.text}}>
+    <div style={{position:'absolute', left:rect.left, top:rect.top, width:rect.width, height:rect.height, borderRadius:Math.round((portraitSupport ? 18 : 30)*metrics.unit), background:palette.panel, boxShadow:portraitSupport ? '0 16px 44px rgba(0,0,0,.3)' : '0 30px 90px rgba(0,0,0,.26)', overflow:'hidden', transform:`translateY(${interpolate(progress,[0,1],[Math.round((portraitSupport ? 20 : 45)*metrics.unit),0])}px)`, opacity:portraitSupport ? progress * 0.9 : progress, color:palette.text, zIndex:10}}>
       {slideSrc ? (
         <Img src={staticFile(slideSrc)} style={{width:'100%', height:'100%', objectFit:'contain', background:'#fff'}} />
       ) : (

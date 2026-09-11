@@ -12,6 +12,18 @@ export const getSceneAvatarLayout = (scene: Scene): VisualAvatarLayout => {
   return layout === 'fullscreen' ? 'hero' : layout;
 };
 
+// A full 16:9 slide and a portrait presenter compete for the same vertical space.
+// Keep the authored PiP value for editor provenance, but render doctor_ppt as a
+// presenter-led scene on a portrait canvas.
+export const getRenderedAvatarLayout = (
+  scene: Scene,
+  width: number,
+  height: number,
+): VisualAvatarLayout => {
+  const layout = getSceneAvatarLayout(scene);
+  return height > width && scene.type === 'doctor_ppt' && layout !== 'hidden' ? 'hero' : layout;
+};
+
 export const getCompositionLayout = (width: number, height: number) => {
   const orientation: RenderOrientation = height > width ? 'portrait' : 'landscape';
   const portrait = orientation === 'portrait';
@@ -103,10 +115,14 @@ export const getVisualPanelRect = (
   const layout = getCompositionLayout(width, height);
   if (layout.portrait) {
     const margin = round(width * 0.05);
-    const panelWidth = width - margin * 2;
+    const panelWidth = sceneType === 'doctor_ppt'
+      ? round(width * 0.34)
+      : width - margin * 2;
     const aspect = sceneType === 'medical_animation' ? 1360 / 790 : 16 / 9;
     const panelHeight = Math.min(round(panelWidth / aspect), round(height * 0.39));
-    const top = round(height * (sceneType === 'visual_full' ? 0.16 : 0.075));
+    const top = sceneType === 'doctor_ppt'
+      ? round(height * 0.09)
+      : round(height * (sceneType === 'visual_full' ? 0.16 : 0.075));
     return {left: margin, top, width: panelWidth, height: panelHeight};
   }
 
