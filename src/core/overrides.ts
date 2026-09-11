@@ -2,6 +2,7 @@ import {z} from 'zod';
 import {
   avatarLayoutSchema,
   projectSchema,
+  sceneCompositionSchema,
   sceneIdSchema,
   sceneTypeSchema,
   sceneVisualSchema,
@@ -19,6 +20,7 @@ const sceneOverrideSchema = z.object({
     scale: z.number().positive().max(1).optional(),
   }).strict().optional(),
   visual: sceneVisualSchema.optional(),
+  composition: sceneCompositionSchema.optional(),
   subtitle: z.object({
     mode: subtitleModeSchema.optional(),
     style: subtitleStyleSchema.optional(),
@@ -76,6 +78,10 @@ export const applyStoryboardOverrides = (
       };
     }
 
+    const composition = override.composition
+      ? {...scene.composition, ...override.composition}
+      : scene.composition;
+
     return {
       ...scene,
       type: override.type ?? scene.type,
@@ -83,6 +89,7 @@ export const applyStoryboardOverrides = (
       slide: override.slide === null ? undefined : override.slide ?? scene.slide,
       avatar,
       visual: override.visual ?? scene.visual,
+      composition,
       subtitle,
       animation,
     };

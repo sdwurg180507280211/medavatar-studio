@@ -1,4 +1,5 @@
 import {captionCuesFromAlignment, captionCuesFromSceneDurations, type CaptionCue} from '../core/captions.js';
+import {assertCompositionReady} from '../core/composition.js';
 import {fileExists, projectPaths, readText, writeJson} from '../core/io.js';
 import type {MedAvatarProject} from '../core/schema.js';
 import type {StoryboardOverrides} from '../core/overrides.js';
@@ -50,6 +51,7 @@ export const loadPreviewProps = async (
 
 export const prepareRenderProps = async (projectName: string) => {
   const state = await loadEffectiveProject(projectName);
+  assertCompositionReady(state.effective);
   const paths = projectPaths(projectName);
   const includeTimedMedia = state.timeline.source === 'actual';
   const [assets, captions] = await Promise.all([

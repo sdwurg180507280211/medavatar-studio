@@ -1,9 +1,10 @@
+import {randomUUID} from 'node:crypto';
 import {createReadStream} from 'node:fs';
-import {stat} from 'node:fs/promises';
+import {rename, stat, unlink, writeFile} from 'node:fs/promises';
 import path from 'node:path';
 import type {IncomingMessage, ServerResponse} from 'node:http';
 import {createServer as createViteServer, type Plugin} from 'vite';
-import {projectPaths, writeJson} from '../core/io.js';
+import {projectPaths} from '../core/io.js';
 import {storyboardOverridesSchema} from '../core/overrides.js';
 import {loadPreviewProps} from '../production/renderProps.js';
 import {resolveGeneratedAssetSource} from '../production/assets.js';
@@ -41,6 +42,17 @@ const readJsonBody = async (req: IncomingMessage) => {
 const parseOverridesBody = async (req: IncomingMessage) =>
   storyboardOverridesSchema.parse(await readJsonBody(req));
 
+const writeJsonAtomic = async (file: string, value: unknown) => {
+  const temp = `${file}.${process.pid}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(temp, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
+    await rename(temp, file);
+  } catch (error) {
+    await unlink(temp).catch(() => undefined);
+    throw error;
+  }
+};
+
 const editorApiPlugin = (projectName: string): Plugin => ({
   name: 'medavatar-editor-api',
   configureServer(server) {
@@ -71,8 +83,10 @@ const editorApiPlugin = (projectName: string): Plugin => ({
       if (req.method === 'PUT' && url.pathname === `${projectApi}/overrides`) {
         try {
           const overrides = await parseOverridesBody(req);
-          await writeJson(projectPaths(projectName).overrides, overrides);
-          sendJson(res, 200, await loadPreviewProps(projectName));
+          // Validate the complete effective project before touching the durable file.
+          const preview = await loadPreviewProps(projectName, {overrides});
+          await writeJsonAtomic(projectPaths(projectName).overrides, overrides);
+          sendJson(res, 200, preview);
         } catch (error) {
           sendJson(res, 400, {error: error instanceof Error ? error.message : String(error)});
         }
