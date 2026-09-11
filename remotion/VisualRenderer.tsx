@@ -1,5 +1,6 @@
 import React from 'react';
 import type {Scene, SceneVisual} from '../src/core/schema';
+import {ComparisonCard} from './ComparisonCard';
 import {EmphasisCard} from './EmphasisCard';
 import {StatisticCard} from './StatisticCard';
 
@@ -15,5 +16,7 @@ export const VisualRenderer: React.FC<{
       return <EmphasisCard data={visual} durationInFrames={durationInFrames} />;
     case 'statistic':
       return <StatisticCard data={visual} durationInFrames={durationInFrames} />;
+    case 'comparison':
+      return <ComparisonCard data={visual} durationInFrames={durationInFrames} />;
   }
 };
