@@ -23,6 +23,11 @@ jobs:
       - run: pnpm install --no-frozen-lockfile
       - name: Typecheck
         run: pnpm typecheck
+      - name: Install media tools
+        if: github.event_name == 'push'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
       - name: HeyGen Alpha contract
         if: github.event_name == 'push'
         run: pnpm exec tsx src/providers/heygenAlphaContract.ts
