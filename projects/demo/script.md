@@ -3,13 +3,13 @@
 <!-- medavatar:id=intro type=doctor_full avatar=hero subtitle=karaoke subtitle_style=medical -->
 很多高血压患者并没有明显的不舒服，但没有症状，并不代表身体没有受到影响。
 
-<!-- medavatar:id=vessel-pressure type=doctor_ppt slide=1 avatar=bottom-right scale=0.28 subtitle=karaoke subtitle_style=minimal -->
+<!-- medavatar:id=vessel-pressure type=doctor_ppt slide=1 subtitle=karaoke subtitle_style=minimal -->
 持续升高的血压，会让血管壁长期承受更大的机械压力。时间一长，血管内皮更容易受损。
 
 <!-- medavatar:id=vascular-injury type=medical_animation avatar=bottom-right animation=artery-pressure keywords=血管内皮,血压,压力 subtitle=karaoke subtitle_style=medical -->
 当血管内皮受损后，炎症反应和脂质沉积更容易发生，动脉粥样硬化风险也随之升高。
 
-<!-- medavatar:id=long-term-management type=doctor_ppt slide=2 avatar=bottom-right scale=0.28 subtitle=karaoke subtitle_style=minimal -->
+<!-- medavatar:id=long-term-management type=doctor_ppt slide=2 subtitle=karaoke subtitle_style=minimal -->
 长期管理高血压，需要关注规律监测、生活方式以及规范治疗，而不是只看有没有症状。
 
 ## 家庭血压管理
