@@ -1,6 +1,18 @@
 {
   "version": "1.0",
   "scenes": {
+    "intro": {
+      "visual": {
+        "type": "comparison",
+        "left": {
+          "label": "没有明显感觉"
+        },
+        "right": {
+          "label": "血管仍在承受压力"
+        },
+        "relation": "vs"
+      }
+    },
     "silent-risk": {
       "visual": {
         "type": "emphasis",

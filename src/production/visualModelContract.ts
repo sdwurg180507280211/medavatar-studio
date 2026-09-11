@@ -25,6 +25,17 @@ const statistic = (
   ...(presentation ? {presentation} : {}),
 });
 
+const comparison = (
+  left: Extract<SceneVisual, {type: 'comparison'}>['left'],
+  right: Extract<SceneVisual, {type: 'comparison'}>['right'],
+  relation?: 'vs' | 'before-after' | 'normal-abnormal' | 'low-high',
+): SceneVisual => ({
+  type: 'comparison',
+  left,
+  right,
+  ...(relation ? {relation} : {}),
+});
+
 const base = projectSchema.parse({
   version: '1.0',
   title: 'visual-contract',
@@ -71,7 +82,53 @@ if (statisticWithoutPresentation.scenes[0]?.visual?.type === 'statistic') {
   assert.equal(statisticWithoutPresentation.scenes[0].visual.presentation, undefined);
 }
 
-const noneDraft = setSceneVisual(statisticDraft, 's1', {type: 'none'});
+const comparisonDensities: SceneVisual[] = [
+  comparison({label: '正常血压'}, {label: '高血压'}),
+  comparison(
+    {label: '治疗前', value: '数值 A'},
+    {label: '治疗后', value: '数值 B'},
+    'before-after',
+  ),
+  comparison(
+    {label: '低风险', value: '较低', context: '示例说明 A'},
+    {label: '高风险', value: '较高', context: '示例说明 B'},
+    'low-high',
+  ),
+];
+for (const visual of comparisonDensities) {
+  const parsed = projectSchema.parse({...base, scenes: [{...base.scenes[0], visual}]});
+  assert.equal(parsed.scenes[0]?.visual?.type, 'comparison');
+}
+if (comparisonDensities[0]?.type === 'comparison') {
+  assert.equal(comparisonDensities[0].left.value, undefined);
+  assert.equal(comparisonDensities[0].left.context, undefined);
+  assert.equal(comparisonDensities[0].right.value, undefined);
+  assert.equal(comparisonDensities[0].right.context, undefined);
+  assert.equal(comparisonDensities[0].relation, undefined);
+}
+
+for (const relation of ['vs', 'before-after', 'normal-abnormal', 'low-high'] as const) {
+  const parsed = projectSchema.parse({
+    ...base,
+    scenes: [{...base.scenes[0], visual: comparison({label: 'A'}, {label: 'B'}, relation)}],
+  });
+  assert.equal(parsed.scenes[0]?.visual?.type, 'comparison');
+  if (parsed.scenes[0]?.visual?.type === 'comparison') {
+    assert.equal(parsed.scenes[0].visual.relation, relation);
+  }
+}
+
+const comparisonVisual = comparison(
+  {label: '没有明显感觉'},
+  {label: '血管仍在承受压力'},
+  'vs',
+);
+const comparisonDraft = setSceneVisual(statisticDraft, 's1', comparisonVisual);
+const comparisonApplied = applyStoryboardOverrides(base, comparisonDraft).project;
+assert.deepEqual(comparisonApplied.scenes[0]?.visual, comparisonVisual);
+assert.equal(comparisonApplied.scenes[0]?.avatar?.layout, 'hero');
+
+const noneDraft = setSceneVisual(comparisonDraft, 's1', {type: 'none'});
 const none = applyStoryboardOverrides(base, noneDraft).project;
 assert.deepEqual(none.scenes[0]?.visual, {type: 'none'});
 
@@ -90,8 +147,10 @@ if (withoutSupport.scenes[0]?.visual?.type === 'emphasis') {
 }
 
 const prepared = await prepareRenderProps('portrait-demo');
+const intro = prepared.state.effective.scenes.find((scene) => scene.id === 'intro');
 const silentRisk = prepared.state.effective.scenes.find((scene) => scene.id === 'silent-risk');
 const cumulativeDamage = prepared.state.effective.scenes.find((scene) => scene.id === 'cumulative-damage');
+assert.deepEqual(intro?.visual, comparison({label: '没有明显感觉'}, {label: '血管仍在承受压力'}, 'vs'));
 assert.deepEqual(silentRisk?.visual, emphasis('没有症状', '≠', '没有风险'));
 assert.deepEqual(
   cumulativeDamage?.visual,
@@ -102,7 +161,19 @@ assert.equal('prototypeVisuals' in prepared.renderProps, false);
 const props = JSON.parse(await readFile(prepared.paths.props, 'utf8')) as Record<string, unknown>;
 assert.equal('prototypeVisuals' in props, false);
 const project = props.project as {scenes?: Array<{id?: string; visual?: SceneVisual}>};
+assert.equal(project.scenes?.find((scene) => scene.id === 'intro')?.visual?.type, 'comparison');
 assert.equal(project.scenes?.find((scene) => scene.id === 'silent-risk')?.visual?.type, 'emphasis');
 assert.equal(project.scenes?.find((scene) => scene.id === 'cumulative-damage')?.visual?.type, 'statistic');
+
+
+for (const file of [
+  'src/core/overrides.ts',
+  'src/editor/overrideDraft.ts',
+  'src/production/effectiveProject.ts',
+  'src/production/renderProps.ts',
+]) {
+  const source = await readFile(file, 'utf8');
+  assert.equal(/comparison/i.test(source), false, `${file} must remain comparison-unaware`);
+}
 
 console.log('✓ visual model contract');

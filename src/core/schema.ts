@@ -23,6 +23,7 @@ export const sceneIdSchema = z.string().regex(
 );
 
 export const statisticPresentationSchema = z.enum(['number', 'percent', 'range', 'trend']);
+export const comparisonRelationSchema = z.enum(['vs', 'before-after', 'normal-abnormal', 'low-high']);
 
 export const sceneVisualSchema = z.discriminatedUnion('type', [
   z.object({type: z.literal('none')}).strict(),
@@ -38,6 +39,20 @@ export const sceneVisualSchema = z.discriminatedUnion('type', [
     label: z.string().min(1).optional(),
     context: z.string().min(1).optional(),
     presentation: statisticPresentationSchema.optional(),
+  }).strict(),
+  z.object({
+    type: z.literal('comparison'),
+    left: z.object({
+      label: z.string().min(1),
+      value: z.string().min(1).optional(),
+      context: z.string().min(1).optional(),
+    }).strict(),
+    right: z.object({
+      label: z.string().min(1),
+      value: z.string().min(1).optional(),
+      context: z.string().min(1).optional(),
+    }).strict(),
+    relation: comparisonRelationSchema.optional(),
   }).strict(),
 ]);
 
@@ -80,6 +95,7 @@ export type MedAvatarProject = z.infer<typeof projectSchema>;
 export type SceneType = z.infer<typeof sceneTypeSchema>;
 export type SceneVisual = z.infer<typeof sceneVisualSchema>;
 export type StatisticPresentation = z.infer<typeof statisticPresentationSchema>;
+export type ComparisonRelation = z.infer<typeof comparisonRelationSchema>;
 export type AvatarLayout = z.infer<typeof avatarLayoutSchema>;
 export type SubtitleMode = z.infer<typeof subtitleModeSchema>;
 export type SubtitleStyle = z.infer<typeof subtitleStyleSchema>;
