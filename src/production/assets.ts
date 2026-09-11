@@ -1,7 +1,8 @@
-import {copyFile, readdir, rm} from 'node:fs/promises';
+import {copyFile, readFile, readdir, rm} from 'node:fs/promises';
 import path from 'node:path';
 import type {AvatarChapterManifest, AvatarChapterPlan} from '../core/chapters.js';
-import {ensureDir, fileExists, projectPaths, readText} from '../core/io.js';
+import {projectConfigSchema} from '../core/config.js';
+import {ensureDir, fileExists, projectPaths, readText, sha256} from '../core/io.js';
 
 export type RenderAssets = {
   narration?: string;
@@ -15,6 +16,95 @@ type AssetFile = {source: string; fileName: string};
 type CollectedAssets = {
   assets: RenderAssets;
   files: AssetFile[];
+};
+
+type AvatarMetadata = {
+  provider?: string;
+  strategy?: 'single' | 'chaptered';
+  avatarId?: string;
+};
+
+type AvatarCacheIdentity = {
+  strategy: 'single' | 'chaptered';
+  avatarId: string;
+  resolution: '720p' | '1080p' | '4k';
+  chapterMaxSeconds: number;
+  plan?: AvatarChapterPlan[];
+};
+
+const AVATAR_PRESENTATION_CACHE_VERSION = 'portrait-alpha-v2';
+const HEYGEN_AVATAR_ASPECT_RATIO = '9:16';
+const HEYGEN_OUTPUT_FORMAT = 'webm';
+
+const readJson = async <T>(file: string): Promise<T | undefined> => {
+  if (!(await fileExists(file))) return undefined;
+  try {
+    return JSON.parse(await readText(file)) as T;
+  } catch {
+    return undefined;
+  }
+};
+
+export const avatarCacheKeyForNarration = (
+  audio: Buffer,
+  identity: AvatarCacheIdentity,
+) => {
+  if (identity.strategy === 'single') {
+    const presentation = `single|${identity.avatarId}|${identity.resolution}|${HEYGEN_AVATAR_ASPECT_RATIO}|${HEYGEN_OUTPUT_FORMAT}|transparent`;
+    return sha256(Buffer.concat([
+      audio,
+      Buffer.from(`|${presentation}|${AVATAR_PRESENTATION_CACHE_VERSION}`),
+    ]));
+  }
+
+  if (!identity.plan) return undefined;
+  return sha256(Buffer.concat([
+    audio,
+    Buffer.from(
+      `|chaptered|${identity.avatarId}|${identity.resolution}|${HEYGEN_AVATAR_ASPECT_RATIO}|${HEYGEN_OUTPUT_FORMAT}|transparent|${AVATAR_PRESENTATION_CACHE_VERSION}|${identity.chapterMaxSeconds}|${JSON.stringify(identity.plan)}`,
+    ),
+  ]));
+};
+
+const findNarrationSource = async (paths: ReturnType<typeof projectPaths>) => {
+  for (const source of [paths.narrationMp3, paths.narrationWav]) {
+    if (await fileExists(source)) return source;
+  }
+  return undefined;
+};
+
+export const avatarMatchesCurrentNarration = async (projectName: string) => {
+  const paths = projectPaths(projectName);
+  const narrationSource = await findNarrationSource(paths);
+  if (!narrationSource) return false;
+
+  const [metadata, cache, config] = await Promise.all([
+    readJson<AvatarMetadata>(paths.avatarMetadata),
+    readJson<Record<string, string | undefined>>(paths.cache),
+    readJson<unknown>(paths.config),
+  ]);
+  if (
+    metadata?.provider !== 'heygen'
+    || !metadata.strategy
+    || !metadata.avatarId
+    || !cache?.avatar
+    || !config
+  ) return false;
+
+  const parsedConfig = projectConfigSchema.safeParse(config);
+  if (!parsedConfig.success) return false;
+  const audio = await readFile(narrationSource);
+  const plan = metadata.strategy === 'chaptered'
+    ? await readJson<AvatarChapterPlan[]>(paths.chapters)
+    : undefined;
+  const expected = avatarCacheKeyForNarration(audio, {
+    strategy: metadata.strategy,
+    avatarId: metadata.avatarId,
+    resolution: parsedConfig.data.avatar.resolution,
+    chapterMaxSeconds: parsedConfig.data.avatar.chapterMaxSeconds,
+    plan,
+  });
+  return Boolean(expected && cache.avatar === expected);
 };
 
 export const readAvatarManifest = async (file: string): Promise<AvatarChapterManifest | undefined> => {
@@ -66,16 +156,30 @@ const collectProjectAssets = async (
   const files: AssetFile[] = [];
 
   if (includeTimedMedia) {
-    for (const source of [paths.narrationMp3, paths.narrationWav]) {
-      if (!(await fileExists(source))) continue;
-      const fileName = path.basename(source);
+    const narrationSource = await findNarrationSource(paths);
+    if (narrationSource) {
+      const fileName = path.basename(narrationSource);
       assets.narration = publicAsset(projectName, fileName);
-      files.push({source, fileName});
-      break;
+      files.push({source: narrationSource, fileName});
     }
 
-    const manifest = await readAvatarManifest(paths.avatarManifest);
-    if (manifest && await avatarManifestIsComplete(manifest, paths)) {
+    const [manifest, metadata] = await Promise.all([
+      readAvatarManifest(paths.avatarManifest),
+      readJson<AvatarMetadata>(paths.avatarMetadata),
+    ]);
+    const singleExists = await fileExists(paths.avatar);
+    const chapteredComplete = Boolean(manifest && await avatarManifestIsComplete(manifest, paths));
+    const hasAnyAvatar = singleExists || chapteredComplete;
+    const selectedAvatarAvailable = metadata?.strategy === 'chaptered'
+      ? chapteredComplete
+      : metadata?.strategy === 'single'
+        ? singleExists
+        : false;
+    const avatarFresh = selectedAvatarAvailable && await avatarMatchesCurrentNarration(projectName);
+
+    if (hasAnyAvatar && !avatarFresh) {
+      console.warn('• avatar asset is stale or unverifiable for the current narration; omitting avatar media');
+    } else if (avatarFresh && metadata?.strategy === 'chaptered' && manifest) {
       assets.avatarChapters = [];
       for (const chapter of manifest.chapters) {
         const source = path.join(paths.avatarChapters, chapter.videoFile);
@@ -86,7 +190,7 @@ const collectProjectAssets = async (
         });
         files.push({source, fileName: chapter.videoFile});
       }
-    } else if (await fileExists(paths.avatar)) {
+    } else if (avatarFresh && metadata?.strategy === 'single') {
       assets.avatar = publicAsset(projectName, 'avatar.webm');
       files.push({source: paths.avatar, fileName: 'avatar.webm'});
     }

@@ -112,13 +112,14 @@ export const getVisualPanelRect = (
   const layout = getCompositionLayout(width, height);
   if (layout.portrait) {
     const margin = round(width * 0.05);
-    const panelWidth = sceneType === 'doctor_ppt'
+    const supportSlide = sceneType === 'doctor_ppt' && avatarLayout === 'hero';
+    const panelWidth = supportSlide
       ? round(width * 0.34)
       : width - margin * 2;
     const aspect = sceneType === 'medical_animation' ? 1360 / 790 : 16 / 9;
     const panelHeight = Math.min(round(panelWidth / aspect), round(height * 0.39));
     const top = sceneType === 'doctor_ppt'
-      ? round(height * 0.09)
+      ? round(height * (supportSlide ? 0.09 : 0.075))
       : round(height * (sceneType === 'visual_full' ? 0.16 : 0.075));
     return {left: margin, top, width: panelWidth, height: panelHeight};
   }
