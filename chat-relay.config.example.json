@@ -1,0 +1,15 @@
+{
+  "cdpUrl": "http://127.0.0.1:9222",
+  "conversationA": "https://chatgpt.com/g/g-p-example/c/conversation-a",
+  "conversationB": "https://chatgpt.com/g/g-p-example/c/conversation-b",
+  "maxTotalTurns": 20,
+  "maxConsecutiveErrors": 3,
+  "turnTimeoutMs": 900000,
+  "responseStableMs": 2000,
+  "pollIntervalMs": 1000,
+  "pendingRecoveryGraceMs": 10000,
+  "handoffMaxChars": 12000,
+  "wakePromptA": "读取共享工作文档，根据其中最新的 STATUS、PHASE、TURN 和 NEXT_ACTION 继续执行你的职责。\n完成本轮工作后更新共享工作文档。\n如果任务应该继续，在回答末尾输出 <<AGENT_LOOP_CONTINUE>>。\n如果整个任务完成，输出 <<AGENT_LOOP_DONE>>。\n如果需要人工介入，输出 <<AGENT_LOOP_HUMAN_REQUIRED>>。\n如果需要暂停，输出 <<AGENT_LOOP_PAUSE>>。\n不要因为等待另一个会话而阻塞本轮回答。\n\n上一轮 Chat B 的结果会由 Relay 自动附在本 Prompt 后面。",
+  "wakePromptB": "读取共享工作文档，根据其中最新的 STATUS、PHASE、TURN 和 NEXT_ACTION 继续执行你的职责。\n完成本轮工作后更新共享工作文档。\n如果任务应该继续，在回答末尾输出 <<AGENT_LOOP_CONTINUE>>。\n如果整个任务完成，输出 <<AGENT_LOOP_DONE>>。\n如果需要人工介入，输出 <<AGENT_LOOP_HUMAN_REQUIRED>>。\n如果需要暂停，输出 <<AGENT_LOOP_PAUSE>>。\n不要因为等待另一个会话而阻塞本轮回答。\n\n上一轮 Chat A 的结果会由 Relay 自动附在本 Prompt 后面。",
+  "checkpointDir": ".agent-relay"
+}

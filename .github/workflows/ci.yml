@@ -1,0 +1,136 @@
+name: CI
+
+on:
+  push:
+    branches: [main, feat/mvp-pipeline]
+  pull_request:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --no-frozen-lockfile
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: ChatGPT A/B Relay contract
+        run: pnpm chat-relay:contract
+      - name: Install media tools
+        if: github.event_name == 'push'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+      - name: HeyGen Alpha contract
+        if: github.event_name == 'push'
+        run: pnpm exec tsx src/providers/heygenAlphaContract.ts
+      - name: Mock pipeline smoke test
+        run: |
+          TTS_PROVIDER=mock pnpm medavatar voice demo
+          test -f projects/demo/output/scene.json
+          test -f projects/demo/output/timing.json
+          test -f projects/demo/output/captions.json
+          test -f projects/demo/output/alignment.json
+          test -f projects/demo/output/chapters.json
+          test -f projects/demo/output/narration.wav
+          node -e "const s=require('./projects/demo/output/scene.json').scenes; if(s[0]?.id!=='intro'||s[0]?.title!=='高血压为什么会悄悄伤害血管'||s[0]?.avatar?.layout!=='hero'||s[2]?.id!=='vascular-injury'||s[2]?.subtitle?.style!=='social'||s.at(-1)?.id!=='home-monitoring'||s.at(-1)?.title!=='家庭血压管理') process.exit(1)"
+          node -e "const c=require('./projects/demo/output/captions.json'); if(!Array.isArray(c)||c.length<2||!c.some(x=>x.characters?.length)) process.exit(1)"
+          node -e "const c=require('./projects/demo/output/chapters.json'); if(!Array.isArray(c)||c.length<1||c.some(x=>x.duration<=0)) process.exit(1)"
+          pnpm exec tsx -e "import {scriptToStoryboard} from './src/storyboard.ts'; let ok=false; try { scriptToStoryboard('x', '<!-- medavatar:id=same -->\n甲\n\n<!-- medavatar:id=same -->\n乙'); } catch (error) { ok=String(error).includes('Duplicate medavatar scene id'); } const portrait=scriptToStoryboard('x','<!-- medavatar:id=p type=doctor_ppt -->\n甲',{width:1080,height:1920,fps:25}).scenes[0]; const explicit=scriptToStoryboard('x','<!-- medavatar:id=p type=doctor_ppt avatar=bottom-right -->\n甲',{width:1080,height:1920,fps:25}).scenes[0]; const landscape=scriptToStoryboard('x','<!-- medavatar:id=p type=doctor_ppt -->\n甲',{width:1920,height:1080,fps:25}).scenes[0]; if(!ok||portrait?.avatar?.layout!=='hero'||portrait?.avatar?.scale!==1||explicit?.avatar?.layout!=='bottom-right'||explicit?.avatar?.scale!==0.28||landscape?.avatar?.layout!=='bottom-right'||landscape?.avatar?.scale!==0.28) process.exit(1);"
+          pnpm exec tsx -e "import {loadPreviewProps} from './src/production/renderProps.ts'; const run=async()=>{const p=await loadPreviewProps('demo'); if(p.timeline.source!=='actual'||p.timeline.stale||p.effective.scenes[2]?.subtitle?.style!=='social'||!Array.isArray(p.captions)||p.captions.length<2) process.exit(1);}; run();"
+          pnpm exec tsx -e "import {setSceneAnimationName,setSceneAvatarLayout,setSceneAvatarScale,setSceneSlide,setSceneSubtitleStyle,setSceneType,setSceneVisual} from './src/editor/overrideDraft.ts'; const input={version:'1.0',scenes:{x:{subtitle:{mode:'karaoke',style:'social'},avatar:{layout:'bottom-right',scale:0.4},type:'doctor_ppt',slide:2,animation:{name:'artery-pressure',keywords:['血管']}}}}; const changed=setSceneSubtitleStyle(input,'x','minimal'); const layout=setSceneAvatarLayout(changed,'x','bottom-left'); const scale=setSceneAvatarScale(layout,'x',0.34); const typed=setSceneType(scale,'x','medical_animation'); const slid=setSceneSlide(typed,'x',3); const animated=setSceneAnimationName(slid,'x','risk-pathway'); const visual=setSceneVisual(animated,'x',{type:'emphasis',headline:'A',highlight:'≠',support:'B'}); const none=setSceneVisual(visual,'x',{type:'none'}); const resetVisual=setSceneVisual(none,'x',undefined); const resetAnimation=setSceneAnimationName(resetVisual,'x',undefined); const resetType=setSceneType(resetAnimation,'x',undefined); const resetSlide=setSceneSlide(resetType,'x',undefined); const resetLayout=setSceneAvatarLayout(resetSlide,'x',undefined); const resetScale=setSceneAvatarScale(resetLayout,'x',undefined); const nullReset=setSceneAnimationName({version:'1.0',scenes:{x:{type:'doctor_full',animation:null}}},'x',undefined); if(animated.scenes.x?.type!=='medical_animation'||animated.scenes.x?.slide!==3||animated.scenes.x?.avatar?.layout!=='bottom-left'||animated.scenes.x?.avatar?.scale!==0.34||animated.scenes.x?.animation?.name!=='risk-pathway'||animated.scenes.x?.animation?.keywords?.[0]!=='血管'||visual.scenes.x?.visual?.type!=='emphasis'||none.scenes.x?.visual?.type!=='none'||resetVisual.scenes.x?.visual!==undefined||resetAnimation.scenes.x?.animation?.name!==undefined||resetAnimation.scenes.x?.animation?.keywords?.[0]!=='血管'||resetSlide.scenes.x?.type!==undefined||resetSlide.scenes.x?.slide!==undefined||resetLayout.scenes.x?.avatar?.layout!==undefined||resetLayout.scenes.x?.avatar?.scale!==0.34||resetScale.scenes.x?.avatar!==undefined||resetScale.scenes.x?.subtitle?.mode!=='karaoke'||resetScale.scenes.x?.subtitle?.style!=='minimal'||nullReset.scenes.x?.animation!==undefined||input.scenes.x?.type!=='doctor_ppt'||input.scenes.x?.slide!==2||input.scenes.x?.avatar?.layout!=='bottom-right'||input.scenes.x?.avatar?.scale!==0.4||input.scenes.x?.animation?.name!=='artery-pressure') process.exit(1);"
+          pnpm exec tsx -e "import {loadBaseProject,resolveStoryboardProject} from './src/production/effectiveProject.ts'; const run=async()=>{const {config,base}=await loadBaseProject('demo'); const ppt=resolveStoryboardProject('demo',config,base,{version:'1.0',scenes:{intro:{type:'doctor_ppt'}}}).effective.scenes.find(x=>x.id==='intro'); const pptPip=resolveStoryboardProject('demo',config,base,{version:'1.0',scenes:{intro:{type:'doctor_ppt',avatar:{layout:'bottom-right'}}}}).effective.scenes.find(x=>x.id==='intro'); const cleared=resolveStoryboardProject('demo',config,base,{version:'1.0',scenes:{intro:{type:'doctor_ppt',slide:null}}}).effective.scenes.find(x=>x.id==='intro'); const layoutOnly=resolveStoryboardProject('demo',config,base,{version:'1.0',scenes:{intro:{avatar:{layout:'bottom-left'}}}}).effective.scenes.find(x=>x.id==='intro'); const fallback=resolveStoryboardProject('demo',config,base,{version:'1.0',scenes:{intro:{type:'medical_animation'}}}).effective.scenes.find(x=>x.id==='intro'); const custom=resolveStoryboardProject('demo',config,base,{version:'1.0',scenes:{intro:{type:'medical_animation',animation:{name:'plaque-growth'}}}}).effective.scenes.find(x=>x.id==='intro'); const dormant=resolveStoryboardProject('demo',config,base,{version:'1.0',scenes:{intro:{animation:{name:'risk-pathway'}}}}).effective.scenes.find(x=>x.id==='intro'); if(ppt?.slide!==1||ppt?.avatar?.layout!=='hero'||ppt?.avatar?.scale!==1||pptPip?.avatar?.layout!=='bottom-right'||pptPip?.avatar?.scale!==0.28||cleared?.slide!==undefined||layoutOnly?.avatar?.layout!=='bottom-left'||layoutOnly?.avatar?.scale!==0.28||fallback?.animation?.name!=='artery-pressure'||custom?.animation?.name!=='plaque-growth'||dormant?.type!=='doctor_full'||dormant?.animation?.name!=='risk-pathway') process.exit(1);}; run();"
+      - name: Editor server smoke test
+        run: |
+          CI=true pnpm medavatar editor demo > /tmp/medavatar-editor.log 2>&1 &
+          editor_pid=$!
+          trap 'kill "$editor_pid" 2>/dev/null || true' EXIT
+          for i in $(seq 1 20); do
+            if curl -fsS http://127.0.0.1:4173/api/projects/demo -o /tmp/editor-project.json; then
+              break
+            fi
+            sleep 0.5
+          done
+          test -s /tmp/editor-project.json || (cat /tmp/medavatar-editor.log && exit 1)
+          curl -fsS http://127.0.0.1:4173/ -o /tmp/editor-index.html
+          curl -fsS http://127.0.0.1:4173/src/App.tsx -o /dev/null
+          node -e "const p=require('/tmp/editor-project.json'); if(p.projectName!=='demo'||p.timeline?.source!=='actual'||!Array.isArray(p.effective?.scenes)||p.effective.scenes.length<1) process.exit(1)"
+
+          curl -fsS -X POST \
+            -H 'Content-Type: application/json' \
+            --data '{"version":"1.0","scenes":{"intro":{"type":"medical_animation","animation":{"name":"plaque-growth"},"visual":{"type":"emphasis","headline":"重点","highlight":"→","support":"结论"}},"vessel-pressure":{"avatar":{"layout":"bottom-left","scale":0.34}},"vascular-injury":{"subtitle":{"style":"minimal"}}}}' \
+            http://127.0.0.1:4173/api/projects/demo/resolve \
+            -o /tmp/editor-resolved.json
+          node -e "const p=require('/tmp/editor-resolved.json'); const intro=p.effective?.scenes?.find(x=>x.id==='intro'); const avatar=p.effective?.scenes?.find(x=>x.id==='vessel-pressure')?.avatar; if(intro?.type!=='medical_animation'||intro?.animation?.name!=='plaque-growth'||intro?.visual?.type!=='emphasis'||intro?.visual?.support!=='结论'||avatar?.layout!=='bottom-left'||avatar?.scale!==0.34||p.timeline?.source!=='actual') process.exit(1)"
+
+          cp projects/demo/storyboard.overrides.json /tmp/demo-overrides.json
+          curl -fsS -X PUT \
+            -H 'Content-Type: application/json' \
+            --data '{"version":"1.0","scenes":{"vascular-injury":{"type":"doctor_ppt","slide":2,"animation":{"name":"risk-pathway"},"visual":{"type":"none"},"avatar":{"layout":"bottom-left","scale":0.34},"subtitle":{"style":"minimal"}}}}' \
+            http://127.0.0.1:4173/api/projects/demo/overrides \
+            -o /tmp/editor-saved.json
+          node -e "const p=require('/tmp/editor-saved.json'); const s=p.effective?.scenes?.find(x=>x.id==='vascular-injury'); if(s?.type!=='doctor_ppt'||s?.slide!==2||s?.visual?.type!=='none'||s?.avatar?.layout!=='bottom-left'||s?.avatar?.scale!==0.34) process.exit(1)"
+          node -e "const p=require('./projects/demo/storyboard.overrides.json'); const s=p.scenes?.['vascular-injury']; if(s?.visual?.type!=='none'||s?.subtitle?.style!=='minimal') process.exit(1)"
+          cp /tmp/demo-overrides.json projects/demo/storyboard.overrides.json
+
+      - name: Detect portrait visual changes
+        if: github.event_name == 'push'
+        id: portrait_changes
+        shell: bash
+        run: |
+          before="${{ github.event.before }}"
+          after="${{ github.sha }}"
+          if [[ "$before" =~ ^0+$ ]]; then
+            before="$(git rev-parse HEAD^)"
+          else
+            git fetch --no-tags --depth=1 origin "$before"
+          fi
+          if git diff --name-only "$before" "$after" | grep -Eq '^(\.github/workflows/(ci|portrait-contract)\.yml$|editor/src/App\.tsx$|remotion/|projects/portrait-demo/|src/providers/(heygen|heygenAlphaContract|types)\.ts$|src/cli\.ts$|src/core/(config|io|schema|overrides)\.ts$|src/editor/overrideDraft\.ts$|src/storyboard\.ts$|src/production/(assets|avatarFreshnessContract|effectiveProject|renderPortraitGolden|renderProps|renderCommand|portraitIteration|visualModelContract)\.ts$|package\.json$|pnpm-lock\.yaml$)'; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Portrait visual model contract and layout invariants
+        if: github.event_name == 'push' && steps.portrait_changes.outputs.changed == 'true'
+        run: |
+          pnpm portrait:voice
+          pnpm exec tsx src/production/visualModelContract.ts
+          pnpm exec tsx -e "import {getCompositionLayout,getPipSize,getSubtitlePlacement,getVisualPanelRect} from './remotion/layout.ts'; const cases=[[1920,1080],[1080,1920],[1280,720],[720,1280],[1440,1440]]; for(const [w,h] of cases){const l=getCompositionLayout(w,h); const rects=[getVisualPanelRect(w,h,'visual_full','hidden'),getVisualPanelRect(w,h,'medical_animation','bottom-right')]; for(const r of rects){if(r.left<0||r.top<0||r.width<=0||r.height<=0||r.left+r.width>w||r.top+r.height>h) process.exit(1);} if(l.hero.top<0||l.hero.width>w||l.hero.top+l.hero.height>h) process.exit(1); const pip=getPipSize(w,h,0.28); const sub=getSubtitlePlacement(w,h,'bottom-right',pip); if(sub.left<0||sub.right<0||sub.bottom<0||sub.left+sub.right>=w) process.exit(1); if(l.portrait&&sub.bottom<l.pip.margin+pip) process.exit(1); if(l.portrait){const support=getVisualPanelRect(w,h,'doctor_ppt','hero'); const primary=getVisualPanelRect(w,h,'doctor_ppt','bottom-right'); if(!(support.width<primary.width&&primary.width>=w*0.85&&primary.left>=0&&primary.left+primary.width<=w)) process.exit(1);} }"
+
+      - name: Portrait golden frames
+        if: github.event_name == 'push' && steps.portrait_changes.outputs.changed == 'true'
+        run: |
+          pnpm portrait:golden
+          node -e "const m=require('./projects/portrait-demo/output/golden/manifest.json'); if(m.width!==1080||m.height!==1920||m.frames?.length!==5) process.exit(1);"
+          test -s projects/portrait-demo/output/golden/01-intro.png
+          test -s projects/portrait-demo/output/golden/02-silent-risk.png
+          test -s projects/portrait-demo/output/golden/03-vascular-pressure.png
+          test -s projects/portrait-demo/output/golden/04-cumulative-damage.png
+          test -s projects/portrait-demo/output/golden/05-ending.png
+
+      - name: Portrait demo full render
+        if: github.event_name == 'push' && steps.portrait_changes.outputs.changed == 'true'
+        run: |
+          pnpm medavatar render portrait-demo
+          test -s projects/portrait-demo/output/final.mp4
+
+      - name: Upload portrait demo review artifact
+        if: github.event_name == 'push' && steps.portrait_changes.outputs.changed == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: portrait-demo-review
+          path: |
+            projects/portrait-demo/output/final.mp4
+            projects/portrait-demo/output/golden/*.png
+            projects/portrait-demo/output/golden/manifest.json
+          retention-days: 14

@@ -1,0 +1,10 @@
+node_modules/
+.env
+.DS_Store
+.cache/
+projects/*/output/
+projects/*/private/
+public/generated/
+.agent-relay/
+chat-relay.config.json
+*.log

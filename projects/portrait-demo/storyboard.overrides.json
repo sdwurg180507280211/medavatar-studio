@@ -1,0 +1,34 @@
+{
+  "version": "1.0",
+  "scenes": {
+    "intro": {
+      "visual": {
+        "type": "comparison",
+        "left": {
+          "label": "没有明显感觉"
+        },
+        "right": {
+          "label": "血管仍在承受压力"
+        },
+        "relation": "vs"
+      }
+    },
+    "silent-risk": {
+      "visual": {
+        "type": "emphasis",
+        "headline": "没有症状",
+        "highlight": "≠",
+        "support": "没有风险"
+      }
+    },
+    "cumulative-damage": {
+      "visual": {
+        "type": "statistic",
+        "value": "1次",
+        "label": "单次血压数字",
+        "context": "更应关注长期累积损伤",
+        "presentation": "number"
+      }
+    }
+  }
+}
