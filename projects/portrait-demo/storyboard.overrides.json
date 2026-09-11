@@ -11,10 +11,11 @@
     },
     "cumulative-damage": {
       "visual": {
-        "type": "emphasis",
-        "headline": "长期高血压",
-        "highlight": "→",
-        "support": "血管损伤"
+        "type": "statistic",
+        "value": "1次",
+        "label": "单次血压数字",
+        "context": "更应关注长期累积损伤",
+        "presentation": "number"
       }
     }
   }

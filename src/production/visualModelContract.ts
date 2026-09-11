@@ -12,6 +12,19 @@ const emphasis = (headline: string, highlight: string, support?: string): SceneV
   ...(support ? {support} : {}),
 });
 
+const statistic = (
+  value: string,
+  label?: string,
+  context?: string,
+  presentation?: 'number' | 'percent' | 'range' | 'trend',
+): SceneVisual => ({
+  type: 'statistic',
+  value,
+  ...(label ? {label} : {}),
+  ...(context ? {context} : {}),
+  ...(presentation ? {presentation} : {}),
+});
+
 const base = projectSchema.parse({
   version: '1.0',
   title: 'visual-contract',
@@ -32,7 +45,33 @@ const overriddenDraft = setSceneVisual(empty, 's1', overrideVisual);
 const overridden = applyStoryboardOverrides(base, overriddenDraft).project;
 assert.deepEqual(overridden.scenes[0]?.visual, overrideVisual);
 
-const noneDraft = setSceneVisual(overriddenDraft, 's1', {type: 'none'});
+const statisticVisual = statistic('30%', '风险下降', '规律控制血压后', 'percent');
+const statisticDraft = setSceneVisual(overriddenDraft, 's1', statisticVisual);
+const statisticOverride = applyStoryboardOverrides(base, statisticDraft).project;
+assert.deepEqual(statisticOverride.scenes[0]?.visual, statisticVisual);
+assert.equal(statisticOverride.scenes[0]?.avatar?.layout, 'hero');
+
+for (const presentation of ['number', 'percent', 'range', 'trend'] as const) {
+  const parsed = projectSchema.parse({
+    ...base,
+    scenes: [{...base.scenes[0], visual: statistic('2–3倍', '脑卒中风险', undefined, presentation)}],
+  });
+  assert.equal(parsed.scenes[0]?.visual?.type, 'statistic');
+  if (parsed.scenes[0]?.visual?.type === 'statistic') {
+    assert.equal(parsed.scenes[0].visual.presentation, presentation);
+  }
+}
+
+const statisticWithoutPresentation = projectSchema.parse({
+  ...base,
+  scenes: [{...base.scenes[0], visual: statistic('120/80', '血压示例')}],
+});
+assert.equal(statisticWithoutPresentation.scenes[0]?.visual?.type, 'statistic');
+if (statisticWithoutPresentation.scenes[0]?.visual?.type === 'statistic') {
+  assert.equal(statisticWithoutPresentation.scenes[0].visual.presentation, undefined);
+}
+
+const noneDraft = setSceneVisual(statisticDraft, 's1', {type: 'none'});
 const none = applyStoryboardOverrides(base, noneDraft).project;
 assert.deepEqual(none.scenes[0]?.visual, {type: 'none'});
 
@@ -54,12 +93,16 @@ const prepared = await prepareRenderProps('portrait-demo');
 const silentRisk = prepared.state.effective.scenes.find((scene) => scene.id === 'silent-risk');
 const cumulativeDamage = prepared.state.effective.scenes.find((scene) => scene.id === 'cumulative-damage');
 assert.deepEqual(silentRisk?.visual, emphasis('没有症状', '≠', '没有风险'));
-assert.deepEqual(cumulativeDamage?.visual, emphasis('长期高血压', '→', '血管损伤'));
+assert.deepEqual(
+  cumulativeDamage?.visual,
+  statistic('1次', '单次血压数字', '更应关注长期累积损伤', 'number'),
+);
 assert.equal('prototypeVisuals' in prepared.renderProps, false);
 
 const props = JSON.parse(await readFile(prepared.paths.props, 'utf8')) as Record<string, unknown>;
 assert.equal('prototypeVisuals' in props, false);
 const project = props.project as {scenes?: Array<{id?: string; visual?: SceneVisual}>};
 assert.equal(project.scenes?.find((scene) => scene.id === 'silent-risk')?.visual?.type, 'emphasis');
+assert.equal(project.scenes?.find((scene) => scene.id === 'cumulative-damage')?.visual?.type, 'statistic');
 
 console.log('✓ visual model contract');

@@ -1,6 +1,7 @@
 import React from 'react';
 import type {Scene, SceneVisual} from '../src/core/schema';
 import {EmphasisCard} from './EmphasisCard';
+import {StatisticCard} from './StatisticCard';
 
 export const VisualRenderer: React.FC<{
   visual?: SceneVisual;
@@ -12,5 +13,7 @@ export const VisualRenderer: React.FC<{
   switch (visual.type) {
     case 'emphasis':
       return <EmphasisCard data={visual} durationInFrames={durationInFrames} />;
+    case 'statistic':
+      return <StatisticCard data={visual} durationInFrames={durationInFrames} />;
   }
 };

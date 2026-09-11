@@ -2,7 +2,7 @@ import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {Player, type PlayerRef} from '@remotion/player';
 import {MedAvatarVideo} from '../../remotion/Video';
 import type {StoryboardOverrides} from '../../src/core/overrides';
-import type {Scene, SceneType, SceneVisual, SubtitleStyle} from '../../src/core/schema';
+import type {Scene, SceneType, SceneVisual, StatisticPresentation, SubtitleStyle} from '../../src/core/schema';
 import {
   setSceneAnimationName,
   setSceneAvatarLayout,
@@ -17,6 +17,7 @@ import type {EditorProjectPayload} from '../../src/production/renderProps';
 const SUBTITLE_STYLES: SubtitleStyle[] = ['medical', 'minimal', 'social'];
 type AvatarLayout = NonNullable<Scene['avatar']>['layout'];
 type EmphasisVisual = Extract<SceneVisual, {type: 'emphasis'}>;
+type StatisticVisual = Extract<SceneVisual, {type: 'statistic'}>;
 const AVATAR_LAYOUTS: Array<{value: AvatarLayout; label: string}> = [
   {value: 'hero', label: 'Hero'},
   {value: 'bottom-left', label: 'Bottom Left'},
@@ -28,6 +29,12 @@ const SCENE_TYPES: Array<{value: SceneType; label: string; short: string}> = [
   {value: 'doctor_ppt', label: 'Doctor + PPT', short: 'Dr + PPT'},
   {value: 'medical_animation', label: 'Medical Animation', short: 'Animation'},
   {value: 'visual_full', label: 'Visual Only', short: 'Visual'},
+];
+const STATISTIC_PRESENTATIONS: Array<{value: StatisticPresentation; label: string}> = [
+  {value: 'number', label: 'Number'},
+  {value: 'percent', label: 'Percent'},
+  {value: 'range', label: 'Range'},
+  {value: 'trend', label: 'Trend'},
 ];
 const ANIMATION_PRESETS = [
   {value: 'artery-pressure', label: 'Artery Pressure', description: 'Sustained pressure on vessel walls'},
@@ -47,13 +54,25 @@ const visualAvatarLayout = (layout: AvatarLayout | undefined) => layout === 'ful
 const visualLabel = (visual: SceneVisual | undefined) => visual?.type ?? 'inherit';
 const compactVisual = (visual: SceneVisual | undefined) => {
   if (!visual) return '—';
-  if (visual.type === 'none') return 'none';
-  return `${visual.headline} ${visual.highlight}${visual.support ? ` ${visual.support}` : ''}`;
+  switch (visual.type) {
+    case 'none':
+      return 'none';
+    case 'emphasis':
+      return `${visual.headline} ${visual.highlight}${visual.support ? ` ${visual.support}` : ''}`;
+    case 'statistic':
+      return `${visual.value}${visual.label ? ` · ${visual.label}` : ''}${visual.context ? ` · ${visual.context}` : ''}`;
+  }
 };
 const defaultEmphasis = (scene: Scene): EmphasisVisual => ({
   type: 'emphasis',
   headline: scene.title ?? scene.text.split(/[，。！？；]/)[0]?.trim() ?? scene.text,
   highlight: '重点',
+});
+const defaultStatistic = (scene: Scene): StatisticVisual => ({
+  type: 'statistic',
+  value: '数值',
+  label: scene.title ?? scene.text.split(/[，。！？；]/)[0]?.trim() ?? scene.text,
+  presentation: 'number',
 });
 
 const requestJson = async <T,>(url: string, init?: RequestInit): Promise<T> => {
@@ -150,21 +169,42 @@ export const App: React.FC = () => {
   const slideBacked = selected?.type === 'doctor_ppt' || selected?.type === 'visual_full';
   const animationBacked = selected?.type === 'medical_animation';
   const emphasis = selected?.visual?.type === 'emphasis' ? selected.visual : undefined;
+  const statistic = selected?.visual?.type === 'statistic' ? selected.visual : undefined;
 
   const selectScene = (scene: Scene) => { setSelectedSceneId(scene.id); playerRef.current?.seekTo(Math.round((sceneStarts.get(scene.id) ?? 0) * fps)); };
   const edit = (next: StoryboardOverrides) => void resolveDraft(next);
   const withSelected = (fn: (id: string) => StoryboardOverrides) => { if (selected) edit(fn(selected.id)); };
 
-  const changeVisualType = (type: SceneVisual['type']) => withSelected((id) => setSceneVisual(
-    draftOverrides, id,
-    type === 'none' ? {type: 'none'} : (selected?.visual?.type === 'emphasis' ? selected.visual : defaultEmphasis(selected!)),
-  ));
+  const changeVisualType = (type: SceneVisual['type']) => withSelected((id) => {
+    if (type === 'none') return setSceneVisual(draftOverrides, id, {type: 'none'});
+    if (type === 'emphasis') {
+      return setSceneVisual(
+        draftOverrides,
+        id,
+        selected?.visual?.type === 'emphasis' ? selected.visual : defaultEmphasis(selected!),
+      );
+    }
+    return setSceneVisual(
+      draftOverrides,
+      id,
+      selected?.visual?.type === 'statistic' ? selected.visual : defaultStatistic(selected!),
+    );
+  });
   const changeEmphasis = (patch: Partial<Omit<EmphasisVisual, 'type'>>) => {
     if (!selected) return;
     const current = selected.visual?.type === 'emphasis' ? selected.visual : defaultEmphasis(selected);
     const next: EmphasisVisual = {...current, ...patch};
     if (!next.headline || !next.highlight) return;
     if (next.support !== undefined && next.support.length === 0) delete next.support;
+    edit(setSceneVisual(draftOverrides, selected.id, next));
+  };
+  const changeStatistic = (patch: Partial<Omit<StatisticVisual, 'type'>>) => {
+    if (!selected) return;
+    const current = selected.visual?.type === 'statistic' ? selected.visual : defaultStatistic(selected);
+    const next: StatisticVisual = {...current, ...patch};
+    if (!next.value) return;
+    if (next.label !== undefined && next.label.length === 0) delete next.label;
+    if (next.context !== undefined && next.context.length === 0) delete next.context;
     edit(setSceneVisual(draftOverrides, selected.id, next));
   };
 
@@ -179,7 +219,7 @@ export const App: React.FC = () => {
 
           <section className="edit-section"><div className="edit-section-heading"><div><div className="edit-title">Scene Type</div><div className="edit-hint">Compatibility renderer; narration and timing stay unchanged</div></div><button type="button" className="reset-button" disabled={override?.type === undefined || resolving} onClick={() => withSelected((id) => setSceneType(draftOverrides, id, undefined))}>Reset</button></div><div className="segmented-control scene-type-control">{SCENE_TYPES.map(({value, label}) => <button type="button" key={value} disabled={resolving} className={selected.type === value ? 'active' : ''} onClick={() => withSelected((id) => setSceneType(draftOverrides, id, value))}>{label}</button>)}</div><Provenance base={base?.type} override={override?.type} effective={selected.type} /></section>
 
-          <section className="edit-section"><div className="edit-section-heading"><div><div className="edit-title">Visual</div><div className="edit-hint">Formal scene.visual · independent from presenter layout</div></div><button type="button" className="reset-button" disabled={override?.visual === undefined || resolving} onClick={() => withSelected((id) => setSceneVisual(draftOverrides, id, undefined))}>Reset</button></div><div className="segmented-control"><button type="button" disabled={resolving} className={selected.visual?.type === 'none' ? 'active' : ''} onClick={() => changeVisualType('none')}>None</button><button type="button" disabled={resolving} className={selected.visual?.type === 'emphasis' ? 'active' : ''} onClick={() => changeVisualType('emphasis')}>Emphasis</button></div>{selected.visual === undefined ? <div className="edit-hint">No formal visual · legacy Scene Type visual remains active until migrated</div> : null}<Provenance base={visualLabel(base?.visual)} override={override?.visual ? visualLabel(override.visual) : '—'} effective={visualLabel(selected.visual)} />{emphasis ? <div className="scale-editor"><label className="scale-label">Headline<input aria-label="Visual headline" style={inputStyle} value={emphasis.headline} disabled={resolving} onChange={(e) => changeEmphasis({headline: e.currentTarget.value})} /></label><label className="scale-label" style={{display: 'block', marginTop: 10}}>Highlight<input aria-label="Visual highlight" style={inputStyle} value={emphasis.highlight} disabled={resolving} onChange={(e) => changeEmphasis({highlight: e.currentTarget.value})} /></label><label className="scale-label" style={{display: 'block', marginTop: 10}}>Support · optional<input aria-label="Visual support" style={inputStyle} value={emphasis.support ?? ''} disabled={resolving} onChange={(e) => changeEmphasis({support: e.currentTarget.value || undefined})} /></label></div> : null}</section>
+          <section className="edit-section"><div className="edit-section-heading"><div><div className="edit-title">Visual</div><div className="edit-hint">Formal scene.visual · independent from presenter layout</div></div><button type="button" className="reset-button" disabled={override?.visual === undefined || resolving} onClick={() => withSelected((id) => setSceneVisual(draftOverrides, id, undefined))}>Reset</button></div><div className="segmented-control"><button type="button" disabled={resolving} className={selected.visual?.type === 'none' ? 'active' : ''} onClick={() => changeVisualType('none')}>None</button><button type="button" disabled={resolving} className={selected.visual?.type === 'emphasis' ? 'active' : ''} onClick={() => changeVisualType('emphasis')}>Emphasis</button><button type="button" disabled={resolving} className={selected.visual?.type === 'statistic' ? 'active' : ''} onClick={() => changeVisualType('statistic')}>Statistic</button></div>{selected.visual === undefined ? <div className="edit-hint">No formal visual · legacy Scene Type visual remains active until migrated</div> : null}<Provenance base={visualLabel(base?.visual)} override={override?.visual ? visualLabel(override.visual) : '—'} effective={visualLabel(selected.visual)} />{emphasis ? <div className="scale-editor"><label className="scale-label">Headline<input aria-label="Visual headline" style={inputStyle} value={emphasis.headline} disabled={resolving} onChange={(e) => changeEmphasis({headline: e.currentTarget.value})} /></label><label className="scale-label" style={{display: 'block', marginTop: 10}}>Highlight<input aria-label="Visual highlight" style={inputStyle} value={emphasis.highlight} disabled={resolving} onChange={(e) => changeEmphasis({highlight: e.currentTarget.value})} /></label><label className="scale-label" style={{display: 'block', marginTop: 10}}>Support · optional<input aria-label="Visual support" style={inputStyle} value={emphasis.support ?? ''} disabled={resolving} onChange={(e) => changeEmphasis({support: e.currentTarget.value || undefined})} /></label></div> : null}{statistic ? <div className="scale-editor"><label className="scale-label">Value<input aria-label="Statistic value" style={inputStyle} value={statistic.value} disabled={resolving} onChange={(e) => changeStatistic({value: e.currentTarget.value})} /></label><label className="scale-label" style={{display: 'block', marginTop: 10}}>Label · optional<input aria-label="Statistic label" style={inputStyle} value={statistic.label ?? ''} disabled={resolving} onChange={(e) => changeStatistic({label: e.currentTarget.value || undefined})} /></label><label className="scale-label" style={{display: 'block', marginTop: 10}}>Context · optional<input aria-label="Statistic context" style={inputStyle} value={statistic.context ?? ''} disabled={resolving} onChange={(e) => changeStatistic({context: e.currentTarget.value || undefined})} /></label><div className="scale-label" style={{marginTop: 12}}>Presentation</div><div className="segmented-control">{STATISTIC_PRESENTATIONS.map(({value, label}) => <button type="button" key={value} disabled={resolving} className={(statistic.presentation ?? 'number') === value ? 'active' : ''} onClick={() => changeStatistic({presentation: value})}>{label}</button>)}</div></div> : null}</section>
 
           <section className={slideBacked ? 'edit-section' : 'edit-section inactive-section'}><div className="edit-section-heading"><div><div className="edit-title">Visual Source · Slide</div><div className="edit-hint">Legacy SceneType visual; selection stays stored when dormant</div></div><button type="button" className="reset-button" disabled={override?.slide === undefined || resolving} onClick={() => withSelected((id) => setSceneSlide(draftOverrides, id, undefined))}>Reset</button></div>{payload.assets.slides.length ? <div className="slide-picker">{payload.assets.slides.map((src, index) => { const page = index + 1; return <button type="button" key={src} className={selected.slide === page ? 'slide-option active' : 'slide-option'} disabled={resolving} onClick={() => withSelected((id) => setSceneSlide(draftOverrides, id, page))}><img src={slideAssetUrl(src)} alt={`Slide ${page}`} /><span>Page {page}</span></button>; })}</div> : <div className="empty-slides">No rendered slide PNGs.</div>}<Provenance base={base?.slide} override={override?.slide} effective={selected.slide} /></section>
 
