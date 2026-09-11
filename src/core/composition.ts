@@ -1,4 +1,4 @@
-import {secondsToDurationFrames} from './frameMath.js';
+import {secondsToDurationFrames} from './frameMath';
 import type {
   AnimationOverlay,
   CompositionBasis,
@@ -10,7 +10,7 @@ import type {
   SceneComposition,
   TextOverlay,
   VisualSegment,
-} from './schema.js';
+} from './schema';
 
 export type CompositionItem = PresenterSegment | VisualSegment | CompositionOverlay;
 export type CompositionTrackKind = 'presenter' | 'visual' | 'overlay';
