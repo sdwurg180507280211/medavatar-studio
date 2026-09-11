@@ -8,6 +8,7 @@ import {
   useCurrentFrame,
   useVideoConfig,
 } from 'remotion';
+import {buildSceneFrameTimeline} from '../src/core/frameMath';
 import type {MedAvatarProject, Scene} from '../src/core/schema';
 import {
   getCompositionLayout,
@@ -26,18 +27,23 @@ const MockDoctor: React.FC = () => (
 );
 
 export const activeScene = (project: MedAvatarProject, frame: number) => {
-  let cursor = 0;
-  for (let index = 0; index < project.scenes.length; index += 1) {
-    const scene = project.scenes[index];
-    const durationInFrames = Math.max(1, Math.round(scene.durationInSeconds * project.video.fps));
-    if (frame < cursor + durationInFrames) {
-      return {scene, index, startFrame: cursor, localFrame: frame - cursor, durationInFrames};
+  const timeline = buildSceneFrameTimeline(project.scenes, project.video.fps);
+  for (const span of timeline) {
+    if (frame < span.endFrame) {
+      const scene = project.scenes[span.index]!;
+      return {
+        scene,
+        index: span.index,
+        startFrame: span.startFrame,
+        localFrame: frame - span.startFrame,
+        durationInFrames: span.durationInFrames,
+      };
     }
-    cursor += durationInFrames;
   }
   const index = Math.max(0, project.scenes.length - 1);
   const scene = project.scenes[index]!;
-  return {scene, index, startFrame: cursor, localFrame: 0, durationInFrames: 1};
+  const endFrame = timeline.at(-1)?.endFrame ?? 0;
+  return {scene, index, startFrame: endFrame, localFrame: 0, durationInFrames: 1};
 };
 
 const sceneMasksAvatarReset = (scene: Scene | undefined) => {

@@ -1,5 +1,6 @@
 import React from 'react';
 import {Composition} from 'remotion';
+import {getProjectDurationInFrames} from '../src/core/frameMath';
 import {MedAvatarVideo} from './Video';
 import type {MedAvatarProject} from '../src/core/schema';
 
@@ -29,15 +30,11 @@ export const RemotionRoot: React.FC = () => (
     defaultProps={{project: defaultProject}}
     calculateMetadata={({props}) => {
       const project = props.project as MedAvatarProject;
-      const duration = project.scenes.reduce(
-        (sum, scene) => sum + Math.round(scene.durationInSeconds * project.video.fps),
-        0,
-      );
       return {
         width: project.video.width,
         height: project.video.height,
         fps: project.video.fps,
-        durationInFrames: Math.max(project.video.fps, duration),
+        durationInFrames: getProjectDurationInFrames(project),
       };
     }}
   />

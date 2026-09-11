@@ -1,5 +1,9 @@
 import {spawn} from 'node:child_process';
 import path from 'node:path';
+import {
+  buildSceneFrameTimeline,
+  getTimelineDurationInFrames,
+} from '../core/frameMath.js';
 import type {MedAvatarProject} from '../core/schema.js';
 import {prepareRenderProps} from './renderProps.js';
 
@@ -54,15 +58,15 @@ const nonNegativeNumber = (value: string | undefined, fallback: number, label: s
   return parsed;
 };
 
-export const sceneFrameRanges = (project: MedAvatarProject): FrameRange[] => {
-  let cursor = 0;
-  return project.scenes.map((scene) => {
-    const duration = Math.max(1, Math.round(scene.durationInSeconds * project.video.fps));
-    const range = {sceneId: scene.id, start: cursor, end: cursor + duration - 1, duration};
-    cursor += duration;
-    return range;
-  });
-};
+// Remotion's --frames CLI syntax is inclusive. Internally scene timing remains
+// canonical half-open [startFrame, endFrame); this adapter converts only at the boundary.
+export const sceneFrameRanges = (project: MedAvatarProject): FrameRange[] =>
+  buildSceneFrameTimeline(project.scenes, project.video.fps).map((span) => ({
+    sceneId: span.sceneId,
+    start: span.startFrame,
+    end: span.endFrame - 1,
+    duration: span.durationInFrames,
+  }));
 
 export const resolveSceneFrameRange = (project: MedAvatarProject, sceneId: string) => {
   const range = sceneFrameRanges(project).find((candidate) => candidate.sceneId === sceneId);
@@ -76,7 +80,7 @@ export const resolvePreviewFrameRange = (project: MedAvatarProject, sceneId?: st
   const fps = project.video.fps;
   const ranges = sceneFrameRanges(project);
   const selected = sceneId ? resolveSceneFrameRange(project, sceneId) : ranges[0];
-  const totalFrames = ranges.at(-1)!.end + 1;
+  const totalFrames = getTimelineDurationInFrames(project.scenes, fps);
   const context = Math.round(PREVIEW_CONTEXT_SECONDS * fps);
   const maxFrames = Math.max(1, Math.round(PREVIEW_SECONDS * fps));
   const start = Math.max(0, selected.start - context);

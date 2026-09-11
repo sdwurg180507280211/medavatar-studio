@@ -1,5 +1,6 @@
 import {spawn} from 'node:child_process';
 import path from 'node:path';
+import {buildSceneFrameTimeline} from '../core/frameMath.js';
 import {ensureDir, writeJson} from '../core/io.js';
 import {prepareRenderProps} from './renderProps.js';
 
@@ -27,15 +28,16 @@ const main = async () => {
   const goldenDir = path.join(paths.output, 'golden');
   await ensureDir(goldenDir);
 
-  let cursor = 0;
-  const frames = state.effective.scenes.map((scene, index) => {
-    const durationInFrames = Math.max(1, Math.round(scene.durationInSeconds * state.effective.video.fps));
-    const frame = cursor + Math.min(durationInFrames - 1, Math.max(0, Math.round(durationInFrames * 0.52)));
-    cursor += durationInFrames;
+  const timeline = buildSceneFrameTimeline(state.effective.scenes, state.effective.video.fps);
+  const frames = timeline.map((span) => {
+    const frame = span.startFrame + Math.min(
+      span.durationInFrames - 1,
+      Math.max(0, Math.round(span.durationInFrames * 0.52)),
+    );
     return {
-      sceneId: scene.id,
+      sceneId: span.sceneId,
       frame,
-      file: `${String(index + 1).padStart(2, '0')}-${scene.id}.png`,
+      file: `${String(span.index + 1).padStart(2, '0')}-${span.sceneId}.png`,
     };
   });
 

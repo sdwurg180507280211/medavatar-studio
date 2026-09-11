@@ -1,6 +1,7 @@
 import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {Player, type PlayerRef} from '@remotion/player';
 import {MedAvatarVideo} from '../../remotion/Video';
+import {buildSceneFrameTimeline, framesToSeconds, getProjectDurationInFrames} from '../../src/core/frameMath';
 import type {StoryboardOverrides} from '../../src/core/overrides';
 import type {ComparisonRelation, Scene, SceneType, SceneVisual, StatisticPresentation, SubtitleStyle} from '../../src/core/schema';
 import {
@@ -55,6 +56,9 @@ const formatTime = (seconds: number) => {
   const remainder = seconds - minutes * 60;
   return `${String(minutes).padStart(2, '0')}:${remainder.toFixed(1).padStart(4, '0')}`;
 };
+const assertNever = (value: never): never => {
+  throw new Error(`Unexpected visual type: ${String(value)}`);
+};
 const sceneSummary = (scene: Scene) => scene.title ?? scene.text.slice(0, 26);
 const slideAssetUrl = (src: string) => src.startsWith('/') ? src : `/${src}`;
 const visualAvatarLayout = (layout: AvatarLayout | undefined) => layout === 'fullscreen' ? 'hero' : layout;
@@ -70,6 +74,8 @@ const compactVisual = (visual: SceneVisual | undefined) => {
       return `${visual.value}${visual.label ? ` · ${visual.label}` : ''}${visual.context ? ` · ${visual.context}` : ''}`;
     case 'comparison':
       return `${visual.left.label}${visual.left.value ? ` ${visual.left.value}` : ''} ↔ ${visual.right.label}${visual.right.value ? ` ${visual.right.value}` : ''}`;
+    default:
+      return assertNever(visual);
   }
 };
 const defaultEmphasis = (scene: Scene): EmphasisVisual => ({
@@ -137,11 +143,13 @@ export const App: React.FC = () => {
     return () => window.removeEventListener('beforeunload', warn);
   }, [dirty]);
 
-  const sceneStarts = useMemo(() => {
-    const starts = new Map<string, number>(); let cursor = 0;
-    for (const scene of payload?.effective.scenes ?? []) { starts.set(scene.id, cursor); cursor += scene.durationInSeconds; }
-    return starts;
-  }, [payload]);
+  const sceneTimeline = useMemo(() => payload
+    ? buildSceneFrameTimeline(payload.effective.scenes, payload.effective.video.fps)
+    : [], [payload]);
+  const sceneStarts = useMemo(
+    () => new Map(sceneTimeline.map((span) => [span.sceneId, span.startFrame])),
+    [sceneTimeline],
+  );
 
   const resolveDraft = async (nextOverrides: StoryboardOverrides) => {
     const version = ++resolveVersionRef.current;
@@ -175,8 +183,8 @@ export const App: React.FC = () => {
   const base = payload.base.scenes.find((scene) => scene.id === selected?.id);
   const override = selected ? draftOverrides.scenes[selected.id] : undefined;
   const fps = payload.effective.video.fps;
-  const durationSeconds = payload.effective.scenes.reduce((sum, scene) => sum + scene.durationInSeconds, 0);
-  const durationInFrames = Math.max(fps, payload.effective.scenes.reduce((sum, scene) => sum + Math.max(1, Math.round(scene.durationInSeconds * fps)), 0));
+  const durationInFrames = getProjectDurationInFrames(payload.effective);
+  const durationSeconds = framesToSeconds(durationInFrames, fps);
   const portrait = payload.effective.video.height > payload.effective.video.width;
   const avatarLayout = visualAvatarLayout(override?.avatar?.layout ?? selected?.avatar?.layout);
   const avatarScale = override?.avatar?.scale ?? selected?.avatar?.scale ?? 0.28;
@@ -187,31 +195,35 @@ export const App: React.FC = () => {
   const statistic = selected?.visual?.type === 'statistic' ? selected.visual : undefined;
   const comparison = selected?.visual?.type === 'comparison' ? selected.visual : undefined;
 
-  const selectScene = (scene: Scene) => { setSelectedSceneId(scene.id); playerRef.current?.seekTo(Math.round((sceneStarts.get(scene.id) ?? 0) * fps)); };
+  const selectScene = (scene: Scene) => { setSelectedSceneId(scene.id); playerRef.current?.seekTo(sceneStarts.get(scene.id) ?? 0); };
   const edit = (next: StoryboardOverrides) => void resolveDraft(next);
   const withSelected = (fn: (id: string) => StoryboardOverrides) => { if (selected) edit(fn(selected.id)); };
 
   const changeVisualType = (type: SceneVisual['type']) => withSelected((id) => {
-    if (type === 'none') return setSceneVisual(draftOverrides, id, {type: 'none'});
-    if (type === 'emphasis') {
-      return setSceneVisual(
-        draftOverrides,
-        id,
-        selected?.visual?.type === 'emphasis' ? selected.visual : defaultEmphasis(selected!),
-      );
+    switch (type) {
+      case 'none':
+        return setSceneVisual(draftOverrides, id, {type: 'none'});
+      case 'emphasis':
+        return setSceneVisual(
+          draftOverrides,
+          id,
+          selected?.visual?.type === 'emphasis' ? selected.visual : defaultEmphasis(selected!),
+        );
+      case 'statistic':
+        return setSceneVisual(
+          draftOverrides,
+          id,
+          selected?.visual?.type === 'statistic' ? selected.visual : defaultStatistic(selected!),
+        );
+      case 'comparison':
+        return setSceneVisual(
+          draftOverrides,
+          id,
+          selected?.visual?.type === 'comparison' ? selected.visual : defaultComparison(selected!),
+        );
+      default:
+        return assertNever(type);
     }
-    if (type === 'statistic') {
-      return setSceneVisual(
-        draftOverrides,
-        id,
-        selected?.visual?.type === 'statistic' ? selected.visual : defaultStatistic(selected!),
-      );
-    }
-    return setSceneVisual(
-      draftOverrides,
-      id,
-      selected?.visual?.type === 'comparison' ? selected.visual : defaultComparison(selected!),
-    );
   });
   const changeEmphasis = (patch: Partial<Omit<EmphasisVisual, 'type'>>) => {
     if (!selected) return;
@@ -273,7 +285,7 @@ export const App: React.FC = () => {
           <div className="source-grid"><div><div className="source-title">Base</div><pre>{JSON.stringify(base ?? null, null, 2)}</pre></div><div><div className="source-title">Override draft</div><pre>{JSON.stringify(override ?? {}, null, 2)}</pre></div><div><div className="source-title">Effective</div><pre>{JSON.stringify(selected, null, 2)}</pre></div></div>
         </div> : null}</aside>
       </main>
-      <footer className="timeline-panel panel"><div className="timeline-meta">00:00.0 / {formatTime(durationSeconds)}</div><div className="timeline-track">{payload.effective.scenes.map((scene) => <button type="button" key={scene.id} title={`${scene.id} · ${scene.durationInSeconds.toFixed(1)}s`} className={scene.id === selected?.id ? 'timeline-scene selected' : 'timeline-scene'} style={{flexGrow: Math.max(0.1, scene.durationInSeconds)}} onClick={() => selectScene(scene)}>{scene.id}</button>)}</div></footer>
+      <footer className="timeline-panel panel"><div className="timeline-meta">00:00.0 / {formatTime(durationSeconds)}</div><div className="timeline-track">{payload.effective.scenes.map((scene, index) => <button type="button" key={scene.id} title={`${scene.id} · ${scene.durationInSeconds.toFixed(1)}s`} className={scene.id === selected?.id ? 'timeline-scene selected' : 'timeline-scene'} style={{flexGrow: Math.max(1, sceneTimeline[index]?.durationInFrames ?? 1)}} onClick={() => selectScene(scene)}>{scene.id}</button>)}</div></footer>
     </div>
   );
 };

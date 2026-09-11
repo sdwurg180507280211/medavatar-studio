@@ -1,5 +1,6 @@
 import React from 'react';
 import {AbsoluteFill, Audio, Sequence, staticFile, useVideoConfig} from 'remotion';
+import {buildSceneFrameTimeline} from '../src/core/frameMath';
 import {getCompositionLayout} from './layout';
 import {AvatarTrack} from './PresenterTrack';
 import {SceneView} from './SceneView';
@@ -19,17 +20,15 @@ export const MedAvatarVideo: React.FC<MedAvatarVideoProps> = ({
   assets={slides:[]} as RenderAssets,
   captions=[],
 }) => {
-  let from = 0;
+  const timeline = buildSceneFrameTimeline(project.scenes, project.video.fps);
   return (
     <AbsoluteFill>
-      {project.scenes.map((scene) => {
-        const duration = Math.max(1,Math.round(scene.durationInSeconds*project.video.fps));
-        const start = from;
-        from += duration;
+      {timeline.map((span) => {
+        const scene = project.scenes[span.index]!;
         const slideSrc = scene.slide ? assets.slides[scene.slide-1] : undefined;
         return (
-          <Sequence key={scene.id} from={start} durationInFrames={duration} premountFor={project.video.fps}>
-            <SceneView scene={scene} slideSrc={slideSrc} durationInFrames={duration} />
+          <Sequence key={scene.id} from={span.startFrame} durationInFrames={span.durationInFrames} premountFor={project.video.fps}>
+            <SceneView scene={scene} slideSrc={slideSrc} durationInFrames={span.durationInFrames} />
           </Sequence>
         );
       })}
