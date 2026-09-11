@@ -19,8 +19,7 @@ const ensureCiCjkFonts = async () => {
 
 const main = async () => {
   await ensureCiCjkFonts();
-  const {paths, state, prototypeVisuals} = await prepareRenderProps(projectName);
-  if (!prototypeVisuals) throw new Error('portrait-demo requires portrait.visuals.json');
+  const {paths, state} = await prepareRenderProps(projectName);
   if (state.effective.video.width !== 1080 || state.effective.video.height !== 1920) {
     throw new Error('portrait-demo must render at 1080x1920');
   }

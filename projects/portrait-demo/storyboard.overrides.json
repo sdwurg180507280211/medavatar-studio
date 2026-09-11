@@ -1,0 +1,21 @@
+{
+  "version": "1.0",
+  "scenes": {
+    "silent-risk": {
+      "visual": {
+        "type": "emphasis",
+        "headline": "没有症状",
+        "highlight": "≠",
+        "support": "没有风险"
+      }
+    },
+    "cumulative-damage": {
+      "visual": {
+        "type": "emphasis",
+        "headline": "长期高血压",
+        "highlight": "→",
+        "support": "血管损伤"
+      }
+    }
+  }
+}

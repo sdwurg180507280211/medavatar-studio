@@ -4,6 +4,7 @@ import {
   projectSchema,
   sceneIdSchema,
   sceneTypeSchema,
+  sceneVisualSchema,
   subtitleModeSchema,
   subtitleStyleSchema,
   type MedAvatarProject,
@@ -17,6 +18,7 @@ const sceneOverrideSchema = z.object({
     layout: avatarLayoutSchema.optional(),
     scale: z.number().positive().max(1).optional(),
   }).strict().optional(),
+  visual: sceneVisualSchema.optional(),
   subtitle: z.object({
     mode: subtitleModeSchema.optional(),
     style: subtitleStyleSchema.optional(),
@@ -80,6 +82,7 @@ export const applyStoryboardOverrides = (
       title: override.title === null ? undefined : override.title ?? scene.title,
       slide: override.slide === null ? undefined : override.slide ?? scene.slide,
       avatar,
+      visual: override.visual ?? scene.visual,
       subtitle,
       animation,
     };

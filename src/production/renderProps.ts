@@ -5,13 +5,11 @@ import type {StoryboardOverrides} from '../core/overrides.js';
 import type {CharacterAlignment} from '../providers/types.js';
 import {resolveProjectAssets, stageProjectAssets, type RenderAssets} from './assets.js';
 import {loadEffectiveProject, type EffectiveProjectState} from './effectiveProject.js';
-import {loadPortraitPrototypeVisuals, type PortraitPrototypeVisuals} from './portraitPrototype.js';
 
 export type RenderProps = {
   project: MedAvatarProject;
   assets: RenderAssets;
   captions: CaptionCue[];
-  prototypeVisuals?: PortraitPrototypeVisuals;
 };
 
 export type EditorProjectPayload = EffectiveProjectState & {
@@ -54,28 +52,16 @@ export const prepareRenderProps = async (projectName: string) => {
   const state = await loadEffectiveProject(projectName);
   const paths = projectPaths(projectName);
   const includeTimedMedia = state.timeline.source === 'actual';
-  const [assets, captions, prototypeVisuals] = await Promise.all([
+  const [assets, captions] = await Promise.all([
     stageProjectAssets(projectName, {includeTimedMedia}),
     loadResolvedCaptions(state),
-    loadPortraitPrototypeVisuals(projectName),
   ]);
-  if (prototypeVisuals) {
-    if (state.effective.video.height <= state.effective.video.width) {
-      throw new Error('portrait prototype visuals require a portrait composition');
-    }
-    const sceneIds = new Set(state.effective.scenes.map((scene) => scene.id));
-    const orphanIds = Object.keys(prototypeVisuals.scenes).filter((sceneId) => !sceneIds.has(sceneId));
-    if (orphanIds.length > 0) {
-      throw new Error(`portrait prototype visuals reference unknown scene ids: ${orphanIds.join(', ')}`);
-    }
-  }
   const renderProps: RenderProps = {
     project: state.effective,
     assets,
     captions,
-    ...(prototypeVisuals ? {prototypeVisuals} : {}),
   };
   await writeJson(paths.scene, state.effective);
   await writeJson(paths.props, renderProps);
-  return {paths, state, assets, captions, prototypeVisuals, renderProps};
+  return {paths, state, assets, captions, renderProps};
 };

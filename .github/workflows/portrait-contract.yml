@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/portrait-contract.yml'
       - '.github/workflows/ci.yml'
+      - 'editor/src/App.tsx'
       - 'remotion/**'
       - 'projects/portrait-demo/**'
       - 'src/providers/heygen.ts'
@@ -14,15 +15,18 @@ on:
       - 'src/cli.ts'
       - 'src/core/config.ts'
       - 'src/core/io.ts'
+      - 'src/core/overrides.ts'
       - 'src/core/schema.ts'
+      - 'src/editor/overrideDraft.ts'
       - 'src/storyboard.ts'
       - 'src/production/assets.ts'
       - 'src/production/avatarFreshnessContract.ts'
-      - 'src/production/portraitPrototype.ts'
+      - 'src/production/effectiveProject.ts'
       - 'src/production/renderPortraitGolden.ts'
       - 'src/production/renderProps.ts'
       - 'src/production/renderCommand.ts'
       - 'src/production/portraitIteration.ts'
+      - 'src/production/visualModelContract.ts'
       - 'package.json'
       - 'pnpm-lock.yaml'
 
@@ -49,10 +53,10 @@ jobs:
           sudo apt-get install -y ffmpeg
       - name: HeyGen Alpha contract
         run: pnpm exec tsx src/providers/heygenAlphaContract.ts
-      - name: Prototype contract
+      - name: Visual model contract
         run: |
           pnpm portrait:voice
-          pnpm exec tsx -e "import {readFile} from 'node:fs/promises'; import {prepareRenderProps} from './src/production/renderProps.ts'; const run=async()=>{const r=await prepareRenderProps('portrait-demo'); if(r.state.effective.video.width!==1080||r.state.effective.video.height!==1920||r.state.effective.scenes.length!==5||r.prototypeVisuals?.version!=='prototype-1'||r.prototypeVisuals?.scenes['silent-risk']?.template!=='emphasis-card'||r.prototypeVisuals?.scenes['cumulative-damage']?.support!=='血管损伤') process.exit(1); const scene=JSON.parse(await readFile(r.paths.scene,'utf8')); const props=JSON.parse(await readFile(r.paths.props,'utf8')); if(scene.prototypeVisuals!==undefined||scene.scenes?.some((s)=>s.visual!==undefined||s.prototypeVisuals!==undefined)||props.prototypeVisuals?.scenes?.['silent-risk']?.headline!=='没有症状') process.exit(1);}; run();"
+          pnpm exec tsx src/production/visualModelContract.ts
       - name: Fast visual iteration contract
         run: |
           pnpm portrait:preview portrait-demo --scene vascular-pressure --dry-run

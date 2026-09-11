@@ -1,5 +1,5 @@
 import type {StoryboardOverrides} from '../core/overrides.js';
-import type {Scene, SceneType, SubtitleStyle} from '../core/schema.js';
+import type {Scene, SceneType, SceneVisual, SubtitleStyle} from '../core/schema.js';
 
 type SceneOverride = NonNullable<StoryboardOverrides['scenes'][string]>;
 type AvatarLayout = NonNullable<Scene['avatar']>['layout'];
@@ -169,6 +169,26 @@ export const setSceneAnimationName = (
     if (Object.keys(animation).length === 0) delete sceneOverride.animation;
     else sceneOverride.animation = animation;
   }
+  writeSceneOverride(next, sceneId, sceneOverride);
+  return next;
+};
+
+export const setSceneVisual = (
+  overrides: StoryboardOverrides,
+  sceneId: string,
+  visual: SceneVisual | undefined,
+): StoryboardOverrides => {
+  const next = structuredClone(overrides);
+  const existing: SceneOverride = next.scenes[sceneId] ?? {};
+
+  if (visual) {
+    next.scenes[sceneId] = {...existing, visual};
+    return next;
+  }
+
+  if (existing.visual === undefined) return next;
+  const sceneOverride: SceneOverride = {...existing};
+  delete sceneOverride.visual;
   writeSceneOverride(next, sceneId, sceneOverride);
   return next;
 };

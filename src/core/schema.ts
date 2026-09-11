@@ -22,6 +22,16 @@ export const sceneIdSchema = z.string().regex(
   'scene id must contain only letters, numbers, underscores and hyphens',
 );
 
+export const sceneVisualSchema = z.discriminatedUnion('type', [
+  z.object({type: z.literal('none')}).strict(),
+  z.object({
+    type: z.literal('emphasis'),
+    headline: z.string().min(1),
+    highlight: z.string().min(1),
+    support: z.string().min(1).optional(),
+  }).strict(),
+]);
+
 export const sceneSchema = z.object({
   id: sceneIdSchema,
   type: sceneTypeSchema,
@@ -33,6 +43,7 @@ export const sceneSchema = z.object({
     layout: avatarLayoutSchema,
     scale: z.number().positive().max(1).default(0.3),
   }).optional(),
+  visual: sceneVisualSchema.optional(),
   subtitle: z.object({
     mode: subtitleModeSchema.default('karaoke'),
     style: subtitleStyleSchema.default('medical'),
@@ -58,6 +69,7 @@ export const projectSchema = z.object({
 export type Scene = z.infer<typeof sceneSchema>;
 export type MedAvatarProject = z.infer<typeof projectSchema>;
 export type SceneType = z.infer<typeof sceneTypeSchema>;
+export type SceneVisual = z.infer<typeof sceneVisualSchema>;
 export type AvatarLayout = z.infer<typeof avatarLayoutSchema>;
 export type SubtitleMode = z.infer<typeof subtitleModeSchema>;
 export type SubtitleStyle = z.infer<typeof subtitleStyleSchema>;

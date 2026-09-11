@@ -1,20 +1,22 @@
 import React from 'react';
 import {interpolate, spring, useCurrentFrame, useVideoConfig} from 'remotion';
-import type {EmphasisCardPrototype} from '../src/production/portraitPrototype';
+import type {SceneVisual} from '../src/core/schema';
 import {getCompositionLayout} from './layout';
+
+type EmphasisVisual = Extract<SceneVisual, {type: 'emphasis'}>;
 
 const seconds = (fps: number, value: number) => Math.round(fps * value);
 
 export const EmphasisCard: React.FC<{
-  data: EmphasisCardPrototype;
+  data: EmphasisVisual;
   durationInFrames: number;
 }> = ({data, durationInFrames}) => {
   const frame = useCurrentFrame();
   const {fps, width, height} = useVideoConfig();
   const layout = getCompositionLayout(width, height);
 
-  // Prototype choreography remains component-owned. In portrait this is now an
-  // overlay above the persistent presenter rather than a full-screen text card.
+  // Choreography remains component-owned in v0.5.0. The formal visual model
+  // describes meaning/content, not a second timing DSL.
   const headline = spring({
     fps,
     frame,
@@ -141,32 +143,34 @@ export const EmphasisCard: React.FC<{
           >
             {data.highlight}
           </div>
-          <div
-            style={{
-              position: 'relative',
-              fontSize: supportSize,
-              lineHeight: 1.08,
-              fontWeight: 900,
-              whiteSpace: 'nowrap',
-              opacity: support,
-              transform: `translateY(${interpolate(support, [0, 1], [Math.round(22 * layout.unit), 0])}px)`,
-            }}
-          >
-            {data.support}
+          {data.support ? (
             <div
               style={{
-                position: 'absolute',
-                left: '8%',
-                right: '8%',
-                bottom: -Math.round(12 * layout.unit),
-                height: Math.max(3, Math.round(5 * layout.unit)),
-                borderRadius: 999,
-                transformOrigin: 'left center',
-                transform: `scaleX(${support})`,
-                background: 'linear-gradient(90deg, rgba(99,229,231,.18), #63E5E7 42%, #2A74FF 100%)',
+                position: 'relative',
+                fontSize: supportSize,
+                lineHeight: 1.08,
+                fontWeight: 900,
+                whiteSpace: 'nowrap',
+                opacity: support,
+                transform: `translateY(${interpolate(support, [0, 1], [Math.round(22 * layout.unit), 0])}px)`,
               }}
-            />
-          </div>
+            >
+              {data.support}
+              <div
+                style={{
+                  position: 'absolute',
+                  left: '8%',
+                  right: '8%',
+                  bottom: -Math.round(12 * layout.unit),
+                  height: Math.max(3, Math.round(5 * layout.unit)),
+                  borderRadius: 999,
+                  transformOrigin: 'left center',
+                  transform: `scaleX(${support})`,
+                  background: 'linear-gradient(90deg, rgba(99,229,231,.18), #63E5E7 42%, #2A74FF 100%)',
+                }}
+              />
+            </div>
+          ) : null}
         </div>
       </div>
     </div>
