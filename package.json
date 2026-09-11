@@ -8,6 +8,7 @@
     "medavatar": "tsx src/entry.ts",
     "chat-relay": "tsx src/entry.ts chat-relay",
     "chat-relay:contract": "tsx src/chatRelay/relayContract.ts",
+    "frame-math:contract": "tsx src/core/frameMathContract.ts",
     "demo": "tsx src/entry.ts build demo",
     "editor:demo": "tsx src/entry.ts editor demo",
     "studio": "remotion studio remotion/index.tsx",
@@ -18,7 +19,7 @@
     "portrait:still": "tsx src/production/portraitIteration.ts still",
     "portrait:preview": "tsx src/production/portraitIteration.ts preview",
     "portrait:render": "tsx src/production/portraitIteration.ts render",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit && tsx src/core/frameMathContract.ts"
   },
   "dependencies": {
     "@remotion/cli": "^4.0.0",

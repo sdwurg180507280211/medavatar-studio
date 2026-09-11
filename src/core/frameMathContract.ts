@@ -25,8 +25,8 @@ assert.equal(getTimelineDurationInFrames(driftingScenes, fps), 39);
 assert.equal(Math.round(driftingScenes.reduce((sum, scene) => sum + scene.durationInSeconds, 0) * fps), 38);
 assert.equal(framesToSeconds(39, fps), 1.56);
 assert.equal(secondsToDurationFrames(0.001, fps), 1);
-assert.equal(getProjectDurationInFrames({video: {width: 1080, height: 1920, fps}, scenes: driftingScenes}), 39);
-assert.equal(getProjectDurationInFrames({video: {width: 1080, height: 1920, fps}, scenes: [{id: 'short', durationInSeconds: 0.01}]}), fps);
+assert.equal(getProjectDurationInFrames({video: {fps}, scenes: driftingScenes}), 39);
+assert.equal(getProjectDurationInFrames({video: {fps}, scenes: [{id: 'short', durationInSeconds: 0.01}]}), fps);
 
 for (const span of timeline) {
   assert.equal(span.endFrame - span.startFrame, span.durationInFrames);
