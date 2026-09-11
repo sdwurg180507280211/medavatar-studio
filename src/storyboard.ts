@@ -124,10 +124,12 @@ const scriptBlocks = (script: string) => {
 export const scriptToStoryboard = (
   title: string,
   script: string,
+  video: MedAvatarProject['video'] = {width: 1080, height: 1920, fps: 25},
 ): MedAvatarProject => {
   const blocks = scriptBlocks(script);
   if (blocks.length === 0) throw new Error('script.md has no narration paragraphs.');
 
+  const portrait = video.height > video.width;
   let nextSlide = 1;
   const scenes = blocks.map(({text, directive, title: sceneHeading}, index) => {
     const type = directive.type ?? DEFAULT_TYPES[index % DEFAULT_TYPES.length];
@@ -139,9 +141,11 @@ export const scriptToStoryboard = (
 
     const defaultLayout: AvatarLayout = type === 'visual_full'
       ? 'hidden'
-      : hasSlide || isAnimation
-        ? 'bottom-right'
-        : 'hero';
+      : type === 'doctor_ppt' && portrait
+        ? 'hero'
+        : hasSlide || isAnimation
+          ? 'bottom-right'
+          : 'hero';
     const layout = directive.avatar ?? defaultLayout;
     const defaultScale = layout === 'hero' || layout === 'fullscreen' ? 1 : 0.28;
     const defaultKeywords = isAnimation ? ['血管', '压力'] : [];
@@ -182,7 +186,7 @@ export const scriptToStoryboard = (
   return {
     version: '1.0',
     title,
-    video: {width: 1080, height: 1920, fps: 25},
+    video,
     scenes,
   };
 };

@@ -93,7 +93,7 @@ const storyboard = async (projectName: string) => {
   const {paths, config} = await loadConfig(projectName);
   await ensureDir(paths.output);
   const script = await readText(paths.script);
-  const generated = projectSchema.parse(scriptToStoryboard(config.title, script));
+  const generated = projectSchema.parse(scriptToStoryboard(config.title, script, config.video));
   const configured: MedAvatarProject = {...generated, video: config.video};
   let project = configured;
   if (await fileExists(paths.overrides)) {

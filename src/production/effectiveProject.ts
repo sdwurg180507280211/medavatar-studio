@@ -30,9 +30,10 @@ export type EffectiveProjectOptions = {
 
 const EMPTY_OVERRIDES: StoryboardOverrides = {version: '1.0', scenes: {}};
 
-const defaultLayoutForType = (type: SceneType) => {
+const defaultLayoutForType = (type: SceneType, portrait: boolean) => {
   if (type === 'visual_full') return 'hidden' as const;
-  if (type === 'doctor_ppt' || type === 'medical_animation') return 'bottom-right' as const;
+  if (type === 'doctor_ppt') return portrait ? 'hero' as const : 'bottom-right' as const;
+  if (type === 'medical_animation') return 'bottom-right' as const;
   return 'hero' as const;
 };
 
@@ -44,6 +45,7 @@ const sceneUsesSlide = (type: SceneType) => type === 'doctor_ppt' || type === 'v
 export const resolveScenePresentation = (
   scene: Scene,
   options: {
+    portrait?: boolean;
     typeChanged?: boolean;
     avatarLayoutChanged?: boolean;
     avatarLayoutOverridden?: boolean;
@@ -51,7 +53,7 @@ export const resolveScenePresentation = (
     slideCleared?: boolean;
   } = {},
 ): Scene => {
-  const fallbackLayout = defaultLayoutForType(scene.type);
+  const fallbackLayout = defaultLayoutForType(scene.type, options.portrait ?? false);
   const layout = options.typeChanged && !options.avatarLayoutOverridden
     ? fallbackLayout
     : scene.avatar?.layout ?? fallbackLayout;
@@ -115,7 +117,7 @@ export const loadBaseProject = async (projectName: string) => {
   const paths = projectPaths(projectName);
   const config = projectConfigSchema.parse(JSON.parse(await readText(paths.config)));
   const script = await readText(paths.script);
-  const generated = projectSchema.parse(scriptToStoryboard(config.title, script));
+  const generated = projectSchema.parse(scriptToStoryboard(config.title, script, config.video));
   const base = projectSchema.parse({...generated, video: config.video});
   return {projectName, paths, config, base};
 };
@@ -128,11 +130,12 @@ export const resolveStoryboardProject = (
 ): StoryboardProjectState => {
   const parsedOverrides = storyboardOverridesSchema.parse(overrides);
   const applied = applyStoryboardOverrides(base, parsedOverrides);
+  const portrait = config.video.height > config.video.width;
   const scenes = applied.project.scenes.map((scene, index) => {
     const baseScene = base.scenes[index];
     const override = parsedOverrides.scenes[scene.id];
     const typeChanged = Boolean(override?.type && override.type !== baseScene?.type);
-    const baseLayout = baseScene?.avatar?.layout ?? defaultLayoutForType(baseScene?.type ?? scene.type);
+    const baseLayout = baseScene?.avatar?.layout ?? defaultLayoutForType(baseScene?.type ?? scene.type, portrait);
     const overrideLayout = override?.avatar?.layout;
     const avatarLayoutChanged = Boolean(
       overrideLayout !== undefined
@@ -140,6 +143,7 @@ export const resolveStoryboardProject = (
       && defaultScaleForLayout(overrideLayout) !== defaultScaleForLayout(baseLayout),
     );
     return resolveScenePresentation(scene, {
+      portrait,
       typeChanged,
       avatarLayoutChanged,
       avatarLayoutOverridden: override?.avatar?.layout !== undefined,

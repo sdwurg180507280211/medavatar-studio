@@ -12,17 +12,14 @@ export const getSceneAvatarLayout = (scene: Scene): VisualAvatarLayout => {
   return layout === 'fullscreen' ? 'hero' : layout;
 };
 
-// A full 16:9 slide and a portrait presenter compete for the same vertical space.
-// Keep the authored PiP value for editor provenance, but render doctor_ppt as a
-// presenter-led scene on a portrait canvas.
+// Rendering consumes the already-resolved Effective Project. Keep this helper as
+// a compatibility boundary only; it must not reinterpret authored or overridden
+// avatar layouts based on composition orientation.
 export const getRenderedAvatarLayout = (
   scene: Scene,
-  width: number,
-  height: number,
-): VisualAvatarLayout => {
-  const layout = getSceneAvatarLayout(scene);
-  return height > width && scene.type === 'doctor_ppt' && layout !== 'hidden' ? 'hero' : layout;
-};
+  _width: number,
+  _height: number,
+): VisualAvatarLayout => getSceneAvatarLayout(scene);
 
 export const getCompositionLayout = (width: number, height: number) => {
   const orientation: RenderOrientation = height > width ? 'portrait' : 'landscape';
