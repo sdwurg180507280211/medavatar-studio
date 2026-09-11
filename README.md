@@ -282,7 +282,84 @@ pnpm medavatar slides demo
 pnpm medavatar render demo
 pnpm medavatar build demo
 pnpm medavatar editor demo
+pnpm chat-relay start --config chat-relay.config.json
+pnpm chat-relay status --config chat-relay.config.json
+pnpm chat-relay pause --config chat-relay.config.json
+pnpm chat-relay resume --config chat-relay.config.json
+pnpm chat-relay stop --config chat-relay.config.json
 ```
+
+## Local ChatGPT A/B Relay
+
+The repository includes a small local relay for two already-open, already-logged-in ChatGPT conversations. The relay connects to Chrome through the Chrome DevTools Protocol (CDP); it does not call an OpenAI API, use Work mode, automate login, or save cookies, passwords, tokens, or chat transcripts.
+
+Copy the template and fill in the two conversation URLs:
+
+```bash
+cp chat-relay.config.example.json chat-relay.config.json
+```
+
+`chat-relay.config.json` is ignored by Git. The two locators can be the ChatGPT conversation URLs or the current target/page URLs exposed by Chrome. The supplied configuration can be represented as:
+
+```json
+{
+  "cdpUrl": "http://127.0.0.1:9222",
+  "conversationA": "https://chatgpt.com/.../conversation-a",
+  "conversationB": "https://chatgpt.com/.../conversation-b",
+  "maxTotalTurns": 20,
+  "maxConsecutiveErrors": 3,
+  "turnTimeoutMs": 900000,
+  "responseStableMs": 2000,
+  "pollIntervalMs": 1000,
+  "pendingRecoveryGraceMs": 10000,
+  "handoffMaxChars": 12000,
+  "checkpointDir": ".agent-relay"
+}
+```
+
+Chrome must already expose the profile containing the two sessions through remote debugging. Depending on the Chrome version, enable remote debugging from `chrome://inspect/#remote-debugging`, or launch the same intended Chrome profile with the flag below before opening the conversations:
+
+```bash
+/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --remote-debugging-port=9222
+```
+
+The relay never launches a replacement login session. If Chrome was already running without CDP enabled, close/relaunch Chrome only when you are comfortable doing so; it is not safe to assume that a newly launched profile contains the existing login.
+
+Start the relay in a long-running terminal:
+
+```bash
+pnpm chat-relay start --config chat-relay.config.json
+```
+
+The handoff protocol is deliberately explicit. A and B should read/update the shared work document as the source of truth and end each completed turn with exactly one of:
+
+```text
+<<AGENT_LOOP_CONTINUE>>
+<<AGENT_LOOP_DONE>>
+<<AGENT_LOOP_HUMAN_REQUIRED>>
+<<AGENT_LOOP_PAUSE>>
+```
+
+When a turn ends with `CONTINUE`, the relay sends the configured wake prompt to the other conversation and appends a bounded copy of the completed assistant result. A `{sourceResult}` placeholder can be placed in `wakePromptA` or `wakePromptB` to control where that handoff appears. The relay keeps the full result only in memory while sending it; it does not put chat text in the checkpoint or ordinary logs. The shared document remains the durable business handoff.
+
+The state machine is:
+
+```text
+WAITING_A → TRIGGER_B → WAITING_B → TRIGGER_A → WAITING_A
+       ↘ DONE / HUMAN_REQUIRED / PAUSED / ERROR
+```
+
+The local checkpoint in `.agent-relay/checkpoint.json` records the run id, current state, active agent, turn count, fingerprints, pending trigger and recovery information. Before sending a handoff, the relay persists a pending trigger and the receiving page's current assistant fingerprint. If the process restarts after the send but before the final checkpoint write, it detects a generating/new response and resumes waiting; if the send is ambiguous, it stops for human review instead of sending a duplicate prompt.
+
+`status`, `pause`, `resume` and `stop` communicate with a running relay through `.agent-relay/control.json`. `Ctrl+C` writes a stopped checkpoint and releases the local lock. The relay also watches for unavailable composers, logged-out/missing pages, page errors, response timeouts, context-limit indicators and repeated failures. A ChatGPT context-limit indication is a terminal `HUMAN_REQUIRED` condition: the relay does not silently create a new conversation or attempt to migrate context.
+
+Run the local, no-network contract tests with:
+
+```bash
+pnpm chat-relay:contract
+```
+
+These tests use mock page adapters and cover A→B/B→A handoffs, marker handling, context-limit stopping, timeout recovery, missing pages, restart recovery and duplicate prevention.
 
 ## Current scope
 

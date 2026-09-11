@@ -6,6 +6,8 @@
   "type": "module",
   "scripts": {
     "medavatar": "tsx src/entry.ts",
+    "chat-relay": "tsx src/entry.ts chat-relay",
+    "chat-relay:contract": "tsx src/chatRelay/relayContract.ts",
     "demo": "tsx src/entry.ts build demo",
     "editor:demo": "tsx src/entry.ts editor demo",
     "studio": "remotion studio remotion/index.tsx",

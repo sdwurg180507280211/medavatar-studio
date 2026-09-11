@@ -5,4 +5,6 @@ node_modules/
 projects/*/output/
 projects/*/private/
 public/generated/
+.agent-relay/
+chat-relay.config.json
 *.log
