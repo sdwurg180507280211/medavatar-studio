@@ -216,8 +216,11 @@ const AvatarClip: React.FC<{
   const enterScale = morphing ? 1 : interpolate(enter,[0,1],[0.975,1]);
   const borderWidth = Math.round(metrics.pip.border * pipMix);
   const radius = interpolate(pipMix, [0, 1], [metrics.hero.radius, pipSize / 2]);
-  const videoScale = interpolate(pipMix, [0, 1], [1, 1.22]);
-  const objectY = interpolate(pipMix, [0, 1], [0, 32]);
+  // The source is already a 9:16 portrait video. `object-fit: cover` does the
+  // only crop needed for the circular PiP; an additional zoom or downward
+  // object-position cuts off the presenter's hairline at the top of the mask.
+  const videoScale = interpolate(pipMix, [0, 1], [1, 1.08]);
+  const objectY = 0;
   const heroShadowAlpha = 0.34 * (1 - pipMix);
   const pipShadowAlpha = 0.38 * pipMix;
   const realPresenter = Boolean(avatarSrc);
@@ -258,7 +261,7 @@ const AvatarClip: React.FC<{
             objectFit:'cover',
             objectPosition:`50% ${objectY}%`,
             transform:`scale(${videoScale})`,
-            transformOrigin:`50% ${interpolate(pipMix,[0,1],[0,34])}%`,
+            transformOrigin:`50% ${interpolate(pipMix,[0,1],[0,50])}%`,
             filter:`drop-shadow(0 28px 70px rgba(0,0,0,${heroShadowAlpha}))`,
           }}
         />
